@@ -1,0 +1,8 @@
+{
+  "inference_table_config": {
+    "enabled": true,
+    "catalog_name": "bimbo",
+    "schema_name": "dev",
+    "table_name_prefix": "modelops_reviewer"
+  }
+}

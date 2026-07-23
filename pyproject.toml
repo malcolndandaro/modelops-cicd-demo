@@ -1,0 +1,28 @@
+[project]
+name = "modelops-cicd-demo"
+version = "0.1.0"
+description = "ModelOps CI/CD demo — two AI gates (PR reviewer + model promotion gate) on Databricks"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+exclude = ["bad-pr"]   # demos intencionales de PR malo
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes — undefined names, unused imports
+    "I",    # isort
+    "B",    # flake8-bugbear — common bugs
+    "UP",   # pyupgrade — usar sintaxis moderna
+    "SIM",  # flake8-simplify
+    "S",    # bandit — security issues (no secrets, no shell=True)
+]
+ignore = [
+    "S101",  # assert usage — OK en tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/daily_route_profitability.py" = ["F821"]  # dbutils/spark injected by Databricks (notebook)

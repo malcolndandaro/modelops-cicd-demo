@@ -1,0 +1,66 @@
+bundle:
+  name: modelops-cicd-demo
+  uuid: 7c1f9b40-modelops-demo-cicd-ml-gate
+
+include:
+  - resources/**/*.yml
+
+variables:
+  catalog:
+    description: Destination Unity Catalog catalog (same catalog for all envs in this demo).
+  schema:
+    description: Schema within the catalog — this is the per-environment boundary (dev/staging/prod).
+  ci_sp_client_id:
+    description: >-
+      Application (client) id of the dedicated CI service principal used as run_as for the
+      production-mode targets (qa/prd). The CI SP is NOT a workspace admin, so it can only set
+      run_as to ITSELF. Provisioning fills this in once the SP is created. Kept non-empty to
+      avoid an empty-var Terraform null-list panic.
+    default: "TODO_CI_SP_CLIENT_ID"
+  agent_model_version:
+    description: >-
+      UC model version of malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer to
+      deploy (config-only redeploy). `@prod` (default) resolves the @prod alias; a number pins
+      that version. NEVER use "" — an empty bundle var serializes to a null Terraform list
+      element and the provider panics (`parameters[<nil>] is not a string`).
+    default: "@prod"
+  dev_suffix:
+    description: >-
+      Optional suffix to ISOLATE the dev deploy per PR in the pre-merge CI gate (e.g. "-pr123"),
+      so each PR deploys to its own ephemeral path and integration tests don't clobber shared dev
+      or other PRs. Empty = the normal shared dev.
+    default: ""
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-967959c2-d585.cloud.databricks.com
+      # Per-PR isolation in CI: the pre-merge gate passes --var dev_suffix=-pr<N> so each
+      # PR deploys to its own path (no collisions). Empty suffix = the normal shared dev.
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/dev${var.dev_suffix}
+    variables:
+      catalog: malcoln_aws_stable_catalog
+      schema: agentic2_mlops_dev
+
+  qa:
+    mode: production
+    workspace:
+      host: https://dbc-967959c2-d585.cloud.databricks.com
+    variables:
+      catalog: malcoln_aws_stable_catalog
+      schema: agentic2_mlops_staging
+    run_as:
+      # Non-admin CI SP can only set run_as to itself. Filled by provisioning.
+      service_principal_name: ${var.ci_sp_client_id}
+
+  prd:
+    mode: production
+    workspace:
+      host: https://dbc-967959c2-d585.cloud.databricks.com
+    variables:
+      catalog: malcoln_aws_stable_catalog
+      schema: agentic2_mlops_prod
+    run_as:
+      service_principal_name: ${var.ci_sp_client_id}
