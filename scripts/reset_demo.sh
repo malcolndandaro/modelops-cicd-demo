@@ -241,76 +241,64 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. UC model reset: keep demand_forecaster v1, @champion → v1, remove @challenger
+# 3. UC model reset across ALL envs. Each environment now trains its OWN model
+#    (dev pre-merge; qa/prod post-merge), so the reset must clean all three schemas:
+#      - dev     → keep v1, @champion → v1, drop @challenger   (baseline for scenario 2's
+#                  gate to compare against; the live runs re-train on top)
+#      - staging → wipe all versions   (the post-merge deploy bootstraps qa fresh)
+#      - prod    → wipe all versions   (the post-merge deploy bootstraps prod fresh)
 # ---------------------------------------------------------------------------
-info "Step 3/5: Resetting UC model aliases for demand_forecaster..."
+info "Step 3/5: Resetting UC model across dev/staging/prod..."
 
 python3 - <<PYEOF
-import sys
-
+import sys, os
 try:
-    from mlflow.tracking import MlflowClient
-    from databricks.sdk import WorkspaceClient
     import mlflow
-    import os
+    from mlflow.tracking import MlflowClient
 except ImportError as e:
     print(f"  [SKIP] Missing dependency: {e}. Install databricks-sdk and mlflow.")
     sys.exit(0)
 
-catalog = "${CATALOG}"
-schema = "${SCHEMA}"
-model_name = "${MODEL}"
-full_name = f"{catalog}.{schema}.{model_name}"
-
-# Configure MLflow to use the Databricks workspace via the CLI profile
 os.environ.setdefault("DATABRICKS_CONFIG_PROFILE", "${PROFILE}")
+catalog, model_name = "${CATALOG}", "${MODEL}"
+mlflow.set_registry_uri("databricks-uc")
+client = MlflowClient()
 
-try:
-    mlflow.set_registry_uri("databricks-uc")
-    client = MlflowClient()
-
-    # Check if model exists
+def reset_env(schema, keep_v1):
+    fqn = f"{catalog}.{schema}.{model_name}"
     try:
-        versions = client.search_model_versions(f"name='{full_name}'")
-    except Exception as e:
-        print(f"  [SKIP] Model {full_name} does not exist yet (first run): {e}")
-        sys.exit(0)
-
-    if not versions:
-        print(f"  [SKIP] No versions found for {full_name} (first run)")
-        sys.exit(0)
-
-    # Find v1
-    v1 = None
-    for v in versions:
-        if v.version == "1":
-            v1 = v
-            break
-
-    if v1 is None:
-        # Use the lowest version as v1 equivalent
-        sorted_versions = sorted(versions, key=lambda v: int(v.version))
-        v1 = sorted_versions[0]
-        print(f"  No explicit v1 found, using version {v1.version} as champion baseline.")
-
-    champion_version = v1.version
-
-    # Remove @challenger alias if it exists
-    try:
-        alias_info = client.get_model_version_by_alias(full_name, "challenger")
-        client.delete_registered_model_alias(full_name, "challenger")
-        print(f"  [OK] Removed @challenger alias (was on v{alias_info.version})")
+        versions = client.search_model_versions(f"name='{fqn}'")
     except Exception:
-        print(f"  [OK] No @challenger alias to remove")
+        print(f"  [OK] {schema}: model does not exist yet (bootstraps on first run)")
+        return
+    if not versions:
+        print(f"  [OK] {schema}: no versions (clean)")
+        return
+    if keep_v1:
+        # keep v1 (or lowest) as @champion, drop @challenger, delete the rest
+        lowest = sorted(versions, key=lambda v: int(v.version))[0].version
+        for a in ("challenger",):
+            try: client.delete_registered_model_alias(fqn, a)
+            except Exception: pass
+        client.set_registered_model_alias(fqn, "champion", lowest)
+        for v in versions:
+            if v.version != lowest:
+                try: client.delete_model_version(fqn, v.version)
+                except Exception: pass
+        print(f"  [OK] {schema}: @champion=v{lowest}, @challenger removed, extra versions deleted")
+    else:
+        # wipe: drop aliases then all versions, so the env bootstraps fresh next deploy
+        for a in ("champion", "challenger"):
+            try: client.delete_registered_model_alias(fqn, a)
+            except Exception: pass
+        for v in versions:
+            try: client.delete_model_version(fqn, v.version)
+            except Exception: pass
+        print(f"  [OK] {schema}: wiped ({len(versions)} version(s)) — will bootstrap on deploy")
 
-    # Set @champion → v1
-    client.set_registered_model_alias(full_name, "champion", champion_version)
-    print(f"  [OK] Set @champion -> v{champion_version}")
-    print(f"  [OK] Model {full_name} reset: @champion=v{champion_version}, @challenger=removed")
-
-except Exception as e:
-    print(f"  [WARN] Could not reset UC model: {e}")
-    print("  If the model does not exist yet, this is expected on the first run.")
+reset_env("agentic2_mlops_dev", keep_v1=True)
+reset_env("agentic2_mlops_staging", keep_v1=False)
+reset_env("agentic2_mlops_prod", keep_v1=False)
 PYEOF
 
 # ---------------------------------------------------------------------------
