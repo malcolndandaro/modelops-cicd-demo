@@ -20,17 +20,20 @@ Environment variables (set by DABs job parameters):
 from __future__ import annotations
 
 import os
+import pathlib
 import sys
 
 import mlflow
 from mlflow import MlflowClient
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _config import resolve_catalog_schema  # noqa: E402
+
 # ---------------------------------------------------------------------------
-# Config from environment (injected by the DABs job)
+# Config: --catalog/--schema args (from the DABs task) → MLFLOW_* env → dev default
 # ---------------------------------------------------------------------------
 
-CATALOG = os.environ.get("MLFLOW_CATALOG", "malcoln_aws_stable_catalog")
-SCHEMA = os.environ.get("MLFLOW_SCHEMA", "agentic2_mlops_dev")
+CATALOG, SCHEMA = resolve_catalog_schema()
 MODEL_NAME = "demand_forecaster"
 REGISTERED_MODEL_FQN = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
@@ -91,14 +94,15 @@ def register_and_alias(run_id: str) -> int:
 def main() -> None:
     run_id: str | None = None
 
-    # Accept --run-id <id> as an optional CLI arg (set by the job if available)
-    if len(sys.argv) >= 3 and sys.argv[1] == "--run-id":
-        run_id = sys.argv[2]
+    # Accept --run-id <id> anywhere in argv (argv also carries --catalog/--schema now,
+    # so match the flag by name rather than by fixed position).
+    if "--run-id" in sys.argv:
+        i = sys.argv.index("--run-id")
+        if i + 1 < len(sys.argv):
+            run_id = sys.argv[i + 1]
 
     if not run_id:
-        # Fallback: read from the file written by train.py
-        import pathlib
-
+        # Fallback: read from the file written by train.py (best-effort; /tmp not shared)
         run_id_file = pathlib.Path("/tmp/demand_forecaster_run_id.txt")  # noqa: S108
         if run_id_file.exists():
             run_id = run_id_file.read_text().strip()

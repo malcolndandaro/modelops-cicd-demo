@@ -54,13 +54,13 @@ _REPO_ROOT = _repo_root()
 sys.path.insert(0, str(_REPO_ROOT / "src" / "ml"))
 
 import promotion_core  # noqa: E402  (after sys.path insert)
+from _config import resolve_catalog_schema  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Environment config (injected by DABs job parameters)
+# Config: --catalog/--schema args (from the DABs task) → MLFLOW_* env → dev default
 # ---------------------------------------------------------------------------
 
-CATALOG = os.environ.get("MLFLOW_CATALOG", "malcoln_aws_stable_catalog")
-SCHEMA = os.environ.get("MLFLOW_SCHEMA", "agentic2_mlops_dev")
+CATALOG, SCHEMA = resolve_catalog_schema()
 MODEL_NAME = "demand_forecaster"
 REGISTERED_MODEL_FQN = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 

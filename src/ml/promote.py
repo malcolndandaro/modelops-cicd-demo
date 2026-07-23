@@ -19,17 +19,20 @@ Usage (serverless task):
 
 from __future__ import annotations
 
-import os
+import pathlib
+import sys
 
 import mlflow
 from mlflow import MlflowClient
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _config import resolve_catalog_schema  # noqa: E402
+
 # ---------------------------------------------------------------------------
-# Config from environment (injected by DABs job parameters)
+# Config: --catalog/--schema args (from the DABs task) → MLFLOW_* env → dev default
 # ---------------------------------------------------------------------------
 
-CATALOG = os.environ.get("MLFLOW_CATALOG", "malcoln_aws_stable_catalog")
-SCHEMA = os.environ.get("MLFLOW_SCHEMA", "agentic2_mlops_dev")
+CATALOG, SCHEMA = resolve_catalog_schema()
 MODEL_NAME = "demand_forecaster"
 REGISTERED_MODEL_FQN = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
