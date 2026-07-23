@@ -47,6 +47,7 @@ def _valid_response(**overrides) -> dict:
 # build_promotion_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPromptContent:
     def test_returns_two_strings(self):
         system, user = promotion_core.build_promotion_prompt(CHALLENGER, CHAMPION, DIFF)
@@ -64,8 +65,8 @@ class TestBuildPromptContent:
         _, user = promotion_core.build_promotion_prompt(CHALLENGER, CHAMPION, DIFF)
         assert "CHALLENGER METRICS" in user
         assert "CHAMPION METRICS" in user
-        assert "8.5" in user   # challenger MAE
-        assert "9.2" in user   # champion MAE
+        assert "8.5" in user  # challenger MAE
+        assert "9.2" in user  # champion MAE
 
     def test_user_contains_config_diff(self):
         _, user = promotion_core.build_promotion_prompt(CHALLENGER, CHAMPION, DIFF)
@@ -98,6 +99,7 @@ class TestBuildPromptContent:
 # ---------------------------------------------------------------------------
 # parse_decision
 # ---------------------------------------------------------------------------
+
 
 class TestParseDecisionClean:
     def test_approve_dict_passthrough(self):
@@ -143,6 +145,35 @@ class TestParseDecisionFencedJSON:
         )
         result = promotion_core.parse_decision(raw)
         assert result["decision"] == "BLOCK"
+
+
+class TestParseDecisionTruncated:
+    """Regression: GLM-5-2 hit the token limit and returned JSON cut off mid-object,
+    which made the gate default to a 'failed to parse' BLOCK that buried the real ML-03
+    reasoning. parse_decision must salvage the decision + findings from truncated JSON."""
+
+    def test_truncated_block_recovers_decision_and_finding(self):
+        # Exactly the shape seen live: a ```json fence, valid up to a cut-off message,
+        # with no closing quote/brace/bracket.
+        raw = (
+            "```json\n"
+            "{\n"
+            '  "decision": "BLOCK",\n'
+            '  "findings": [\n'
+            "    {\n"
+            '      "rule_id": "ML-03",\n'
+            '      "severity": "BLOCKER",\n'
+            '      "message": "Challenger MAE (6.5697) is significantly worse than champion '
+            "MAE (3.5159). The challenger does not satisfy challenger MAE <= champion MAE. No"
+        )
+        result = promotion_core.parse_decision(raw)
+        assert result["decision"] == "BLOCK"
+        assert any(f.get("rule_id") == "ML-03" for f in result["findings"])
+
+    def test_truncated_approve_recovers_decision(self):
+        raw = '{\n  "decision": "APPROVE",\n  "findings": [],\n  "justification": "Challenger'
+        result = promotion_core.parse_decision(raw)
+        assert result["decision"] == "APPROVE"
 
 
 class TestParseDecisionMalformed:
@@ -221,6 +252,7 @@ class TestParseDecisionFindings:
 # bootstrap_decision
 # ---------------------------------------------------------------------------
 
+
 class TestBootstrapDecision:
     def test_no_champion_returns_approve(self):
         result = promotion_core.bootstrap_decision(champion_exists=False)
@@ -248,6 +280,7 @@ class TestBootstrapDecision:
 # ---------------------------------------------------------------------------
 # compare_metrics
 # ---------------------------------------------------------------------------
+
 
 class TestCompareMetrics:
     def test_challenger_better_than_champion(self):

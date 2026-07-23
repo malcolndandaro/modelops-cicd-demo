@@ -164,8 +164,63 @@ def _strip_fences(raw: str) -> str:
     return raw.strip()
 
 
+def _close_json(prefix: str) -> str | None:
+    """Given a prefix of a JSON object, append the minimal closers to balance it.
+
+    Closes an open string, drops a dangling trailing comma / `"key":` fragment, and
+    appends the `]`/`}` needed to balance the bracket stack. Returns the candidate or None.
+    """
+    stack: list[str] = []
+    in_str = esc = False
+    for ch in prefix:
+        if in_str:
+            esc = (ch == "\\") and not esc
+            if ch == '"' and not esc:
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]" and stack:
+            stack.pop()
+    out = prefix
+    if in_str:
+        out += '"'
+    out = out.rstrip()
+    # a trailing `,` or a dangling `"key":` (value never arrived) can't be closed — trim it
+    out = re.sub(r",\s*$", "", out)
+    out = re.sub(r'"[^"]*"\s*:\s*$', "", out).rstrip().rstrip(",")
+    return out + "".join(reversed(stack)) if stack or out.endswith("}") else None
+
+
+def _repair_truncated_json(s: str) -> str | None:
+    """Best-effort recovery of JSON truncated mid-object (LLM token limit).
+
+    Brute-force but robust: from the full string down to the opening brace, try closing
+    each prefix and json.loads it; return the LARGEST prefix that parses to a dict with a
+    "decision" key. So a cut-off `{"decision":"BLOCK","findings":[{"rule_id":"ML-03",...<cut>`
+    recovers the decision plus every COMPLETE finding, dropping only the incomplete tail.
+    """
+    start = s.find("{")
+    if start < 0:
+        return None
+    body = s[start:]
+    # Walk end→start; first (largest) prefix that closes into a valid dict wins.
+    for end in range(len(body), 1, -1):
+        candidate = _close_json(body[:end])
+        if candidate is None:
+            continue
+        try:
+            obj = json.loads(candidate)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(obj, dict) and "decision" in obj:
+            return candidate
+    return None
+
+
 def _loads_tolerant(raw: object) -> object | None:
-    """Best-effort JSON decode tolerant of fences and trailing prose."""
+    """Best-effort JSON decode tolerant of fences, trailing prose, AND truncation."""
     if isinstance(raw, dict | list):
         return raw
     if not isinstance(raw, str):
@@ -176,12 +231,20 @@ def _loads_tolerant(raw: object) -> object | None:
         return json.loads(cleaned)
     except (ValueError, TypeError):
         pass
-    # Fall back to balanced-brace extraction from original string
+    # Fall back to balanced-brace extraction from the original string
     obj_str = _first_balanced_object(raw)
-    if obj_str is None:
+    if obj_str is not None:
+        try:
+            return json.loads(obj_str)
+        except (ValueError, TypeError):
+            pass
+    # Last resort: the JSON was truncated mid-object (LLM token limit) so no balanced
+    # object exists — repair it by auto-closing brackets so the decision survives.
+    repaired = _repair_truncated_json(cleaned)
+    if repaired is None:
         return None
     try:
-        return json.loads(obj_str)
+        return json.loads(repaired)
     except (ValueError, TypeError):
         return None
 

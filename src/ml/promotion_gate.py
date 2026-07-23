@@ -202,7 +202,10 @@ def _call_llm(system: str, user: str, max_attempts: int = 3) -> str:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            max_tokens=1200,
+            # Generous ceiling so the decision JSON is NEVER truncated mid-object — a
+            # cut-off response is unparseable and made the gate default to a "failed to
+            # parse" BLOCK that buried the real ML-03 reasoning.
+            max_tokens=20000,
             temperature=0.0,
         )
         last = (resp.choices[0].message.content or "").strip()
