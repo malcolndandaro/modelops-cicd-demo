@@ -23,7 +23,6 @@ import sys
 
 import mlflow
 from mlflow import MlflowClient
-from mlflow.deployments import get_deploy_client
 
 # ---------------------------------------------------------------------------
 # Lazy import of promotion_core — supports both installed-package and
@@ -182,20 +181,33 @@ def _get_config_diff(
 # LLM call
 # ---------------------------------------------------------------------------
 
-def _call_llm(system: str, user: str) -> str:
-    """Call databricks-glm-5-2 with the promotion prompt."""
-    client = get_deploy_client("databricks")
-    resp = client.predict(
-        endpoint=LLM_ENDPOINT,
-        inputs={
-            "messages": [
+def _call_llm(system: str, user: str, max_attempts: int = 3) -> str:
+    """Call databricks-glm-5-2 with the promotion prompt, retrying empty responses.
+
+    Runs as the CI SP (which owns the model and holds EXECUTE on the FM). Uses the
+    serving OpenAI client for consistency with the reviewer agent. GLM-5-2 occasionally
+    returns an EMPTY completion; an empty string is unparseable and would make the gate
+    default to BLOCK spuriously — so retry a few times and only return what we get.
+    """
+    from databricks.sdk import WorkspaceClient
+
+    client = WorkspaceClient().serving_endpoints.get_open_ai_client()
+    last = ""
+    for attempt in range(1, max_attempts + 1):
+        resp = client.chat.completions.create(
+            model=LLM_ENDPOINT,
+            messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "max_tokens": 1200,
-        },
-    )
-    return resp["choices"][0]["message"]["content"]
+            max_tokens=1200,
+            temperature=0.0,
+        )
+        last = (resp.choices[0].message.content or "").strip()
+        if last:
+            return last
+        print(f"  LLM returned empty response (attempt {attempt}/{max_attempts}) — retrying")
+    return last
 
 
 # ---------------------------------------------------------------------------
