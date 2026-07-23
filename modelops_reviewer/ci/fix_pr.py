@@ -41,6 +41,14 @@ LLM_ENDPOINT = os.environ.get("LLM_ENDPOINT", "databricks-glm-5-2")
 # "local" so local test runs don't break.
 RUN_ID = os.environ.get("RUN_ID", "local")
 _GH = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
+# The GitHub App token (BOT_TOKEN) is used to CREATE the fix PR. The default GITHUB_TOKEN
+# cannot open PRs when "Allow GitHub Actions to create and approve pull requests" is
+# disabled (403 Forbidden) — the App identity is not subject to that restriction and holds
+# pull_requests:write. Fall back to GH_TOKEN if the App token isn't present.
+_GH_BOT = {
+    "Authorization": f"Bearer {BOT_TOKEN or GH_TOKEN}",
+    "Accept": "application/vnd.github+json",
+}
 
 
 def gh_get(path: str) -> dict:
@@ -49,8 +57,10 @@ def gh_get(path: str) -> dict:
     return r.json()
 
 
-def gh_post(path: str, body: dict) -> dict:
-    r = requests.post(f"https://api.github.com{path}", headers=_GH, json=body, timeout=30)
+def gh_post(path: str, body: dict, headers: dict | None = None) -> dict:
+    r = requests.post(
+        f"https://api.github.com{path}", headers=headers or _GH, json=body, timeout=30
+    )
     r.raise_for_status()
     return r.json()
 
@@ -304,6 +314,7 @@ def main() -> None:
                 "base": head_ref,
                 "body": pr_body,
             },
+            headers=_GH_BOT,  # App identity can create PRs; GITHUB_TOKEN may be 403-blocked
         )
         fix_pr_url = new_pr.get("html_url", "(url unavailable)")
         fix_pr_number = new_pr.get("number", "")
