@@ -37,8 +37,21 @@ DABs deployment — it is NOT the demo protagonist. The ML pipeline under `src/m
   `malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer` (alias `@prod`),
   served at endpoint `modelops-reviewer` (task `agent/v1/responses`).
 - **KA-grounded.** Rules come from the ModelOps Handbook, retrieved via the Knowledge
-  Assistant endpoint `modelops-handbook-ka` (Agent Bricks KA over the handbook docs).
-- **LLM:** `databricks-glm-5-2`, `temperature=0.0`.
+  Assistant. Its Agent Bricks **display name** is `modelops-handbook-ka`, but the KA's
+  **serving endpoint** is auto-named `ka-5f315d3c-endpoint` — that's what the agent
+  invokes (overridable via the `KA_ENDPOINT` env var; the reviewer/fix shells default to
+  it). The KA speaks the Responses API (`input[]` / `output[].content[].text`), not
+  chat-completions. Requires the workspace NOT enrolled in the Serverless Access Controls
+  Preview (Agent Bricks KA is blocked while that preview is on).
+- **LLM:** `databricks-glm-5-2`, `temperature=0.0`. **FM auth:** this account has the
+  Foundation Model UC permissions feature enabled, so the calling identity needs `EXECUTE`
+  on `system.ai.databricks-glm-5-2` (+ `USE_CATALOG on system`, `USE_SCHEMA on system.ai`).
+  The deployed agent's down-scoped OBO token does NOT carry these, so `_call_llm`
+  authenticates as the **CI SP** (which holds the grant) via
+  `WorkspaceClient(..., auth_type="oauth-m2m").serving_endpoints.get_open_ai_client()`,
+  with the SP creds injected as served-entity env vars `MODELOPS_SP_CLIENT_ID` /
+  `MODELOPS_SP_CLIENT_SECRET`. `auth_type="oauth-m2m"` is REQUIRED — inside serving the
+  ambient OBO token collides with the SP creds otherwise.
 - **Two modes, one agent.** *Review mode* (auto on every PR) posts cited findings + a
   Check Run. *Fix mode* (`/modelops-fix`) opens a new `modelops-fix/...` branch with the
   rewrite applied, opens a PR against the original PR's head branch, and comments the
@@ -80,8 +93,8 @@ PR → pr-checks (Ruff + sqlfluff + bundle validate)  +  modelops-review (Gate 1
 | `modelops_reviewer/index/` | `build_handbook_index.py` (parse handbook → table + VS index), `verify_retrieval.py`. |
 | `modelops_reviewer/eval/` | `run_eval.py` (mlflow.genai.evaluate, 100% regression gate), `scorers.py`, `fixtures.py`. |
 | `modelops_reviewer/gateway/` | AI Gateway config and cost report. |
-| `modelops_reviewer/tests/test_review_core.py` | 37 unit tests over the pure core. |
-| `modelops_handbook/` | 7 markdown files: 22 rules (ENV, ML, TP, SEC, SQL, NM, DABs). |
+| `modelops_reviewer/tests/test_review_core.py` | 40 unit tests over the pure core. |
+| `modelops_handbook/` | 8 markdown files (README + 7 topics): ENV, TP, SQL, SEC, NM, DABs, and **ML lifecycle (ML-01..ML-05)**. Uploaded to UC volume `handbook_volume`, indexed by the KA. |
 | `src/ml/` | Gate 2: `train.py`, `register.py`, `promotion_core.py`, `promotion_gate.py`, `promote.py`, `config.yml`. |
 | `src/retail/transforms.py` | Pure retail pipeline transforms (vendored, transform-pattern). |
 | `src/daily_route_profitability.py` | Retail job entrypoint notebook. |
@@ -147,22 +160,35 @@ update. Never set `agent_model_version` to `""` (empty string panics the TF prov
   violation: a dev config reading from `agentic2_mlops_prod`.
 - **UC aliases only.** `@champion` / `@challenger` for Gate 2; no workspace-registry
   stages. Comment in code explicitly calls this out for the "stage transitions" question.
-- **M2M auth + self-hosted runner.** CI authenticates via OAuth M2M SP. All Databricks-
-  touching jobs run on the self-hosted runner (VPN-only workspace).
-- **Secret hygiene.** PUBLIC repo. Secrets: `DATABRICKS_CLIENT_SECRET`,
-  `MODELOPS_BOT_TOKEN` (GitHub Actions secrets). Non-secret: `DATABRICKS_HOST`,
-  `DATABRICKS_SP_CLIENT_ID` (repo variables).
+- **M2M auth + self-hosted runner.** CI authenticates via OAuth M2M SP (`sp-modelops-ci`).
+  All Databricks-touching jobs run on the self-hosted runner (VPN-only workspace) at
+  `/Users/malcoln.dandaro/Documents/Work/Projects/actions-runner`.
+- **Fix-bot = GitHub App (not a PAT).** `/modelops-fix` runs as the GitHub App: the
+  workflow mints a short-lived installation token via `actions/create-github-app-token`
+  (App id in repo var `MODELOPS_BOT_APP_ID`, private key in secret
+  `MODELOPS_BOT_APP_PRIVATE_KEY`). The App push (distinct from `GITHUB_TOKEN`) re-triggers
+  review + checks. GitHub Environments `qa`/`prod` gate the deploy with a required reviewer.
+- **Secret hygiene.** PUBLIC repo. GitHub Actions secrets: `DATABRICKS_CLIENT_SECRET`,
+  `MODELOPS_BOT_APP_PRIVATE_KEY`. Repo variables: `DATABRICKS_HOST`,
+  `DATABRICKS_SP_CLIENT_ID`, `MODELOPS_BOT_APP_ID`.
 - **Output language.** Code identifiers in English; handbook and agent output in English
   (rebranded from the original Spanish demo). PT-BR only in `DEMO.md` (presenter's narration).
 
-## Live assets (verified)
+## Live assets (verified 2026-07-23 — both gates tested live)
 
-- **Serving endpoint `modelops-reviewer`** — `READY`, alias `@prod`, FM `databricks-glm-5-2`.
-- **Knowledge Assistant `modelops-handbook-ka`** — Agent Bricks KA over handbook docs.
-- **Seed tables** `malcoln_aws_stable_catalog.agentic2_mlops_dev.fact_sales` + `dim_store`.
-- **UC model** `malcoln_aws_stable_catalog.agentic2_mlops_dev.demand_forecaster`,
-  aliases `@champion` → v1, `@challenger` removed on demo reset.
-- **CI SP grants:** CI SP has `USE_CATALOG` + schema-level grants on the three schemas.
+- **Serving endpoint `modelops-reviewer`** — `READY`, UC model v4 `@prod`, FM
+  `databricks-glm-5-2`. Smoke-tested: hero diff → BLOCKER ENV-01 + SUGGESTION ENV-02,
+  handbook-cited. Serving identity authenticates to the FM as the CI SP (see FM auth above).
+- **Knowledge Assistant** — display `modelops-handbook-ka`, serving endpoint
+  `ka-5f315d3c-endpoint` (`READY`), grounded on `handbook_volume`. Verified: ENV-01 query
+  returns the rule text + a `url_citation`.
+- **UC model** `...agentic2_mlops_dev.demand_forecaster` — `@champion` → v1, no
+  `@challenger` (clean reset baseline). Bootstrap train→register→gate→promote ran green.
+- **Seed tables** `...agentic2_mlops_dev.fact_sales` + `dim_store`.
+- **CI SP grants:** `sp-modelops-ci` has `USE_CATALOG` + schema grants on all three schemas,
+  plus `EXECUTE` on `system.ai.databricks-glm-5-2`. OAuth M2M auth verified.
+- **GitHub:** repo public; secrets/vars set; Environments `qa`/`prod` with required reviewer;
+  fix-bot GitHub App installed (contents/PR/issues write).
 
 ## Pointers
 
