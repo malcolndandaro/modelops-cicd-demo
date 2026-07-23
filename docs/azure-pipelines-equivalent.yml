@@ -1,8 +1,8 @@
 # Equivalente directo en Azure DevOps Pipelines para el quality gate.
 # Mismo shape que `.github/workflows/pr-checks.yml`, ajustado a la sintaxis ADO.
 #
-# Esto es lo que Bimbo debería implementar como `azure-pipelines.yml` en sus
-# repos de proyecto. Auth real va vía OIDC federation — ver el mapa de auth en
+# This is what a retail/ModelOps team should implement as `azure-pipelines.yml`
+# in their project repos. Auth real va vía OIDC federation — ver el mapa de auth en
 # `ado-translation.md` (mismo directorio) y el pendiente `docs/oidc-via-azure.md`.
 #
 # Parte de un set de 4 pipelines ADO. Mapa completo, identidad del bot y el gap
@@ -65,7 +65,7 @@ stages:
         # que forzar el pool self-hosted (no el `ubuntu-latest` hosted del top-level),
         # porque un agente hosted tiene IP no allowlisted y sería rechazado.
         pool:
-          name: 'Bimbo-OnPrem'
+          name: 'ModelOps-OnPrem'
         steps:
           - task: AzureCLI@2
             inputs:

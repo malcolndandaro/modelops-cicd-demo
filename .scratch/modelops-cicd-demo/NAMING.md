@@ -24,8 +24,12 @@ judgment rebrand of bare `bimbo` / `bakery` tokens in your assigned files.
 ## Serving / UC assets
 - Serving endpoint (reviewer agent): `modelops-reviewer` (done)
 - UC model (reviewer): `malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer`
-- Knowledge Assistant endpoint (Gate 1 grounding): **`modelops-handbook-ka`**
-  (Agent Bricks KA over the handbook docs; replaces bimbo's raw Vector Search)
+- Knowledge Assistant (Gate 1 grounding): display name **`modelops-handbook-ka`**,
+  KA id `5f315d3c-83b5-4d47-80cc-1b6b5c25dc2c`, but its SERVING ENDPOINT is
+  auto-named **`ka-5f315d3c-endpoint`** — that's what the reviewer invokes.
+  Overridable via env var `KA_ENDPOINT`. (Agent Bricks KA over the handbook docs;
+  replaces bimbo's raw Vector Search. Requires the workspace NOT enrolled in the
+  Serverless Access Controls Preview — Malcoln disabled it 2026-07-23.)
 - ML model (Gate 2): `malcoln_aws_stable_catalog.<env-schema>.demand_forecaster`
   - aliases: `@champion` (live), `@challenger` (candidate). NO workspace-registry stages.
 

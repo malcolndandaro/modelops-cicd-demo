@@ -1,9 +1,9 @@
-"""Fixtures for serverless integration tests (slice 07).
+"""Fixtures for serverless integration tests.
 
 `spark` is a Databricks Connect serverless session against the real workspace —
-no local cluster, billed per second. Tables live in bimbo.<schema> (already
-seeded). databricks-connect is imported lazily so plain collection (without it
-installed) doesn't error.
+no local cluster, billed per second. Tables live in the configured catalog/schema
+(already seeded). databricks-connect is imported lazily so plain collection
+(without it installed) doesn't error.
 """
 
 from __future__ import annotations
@@ -14,11 +14,11 @@ import sys
 
 import pytest
 
-# Import the vendored transforms (src/bakery) without the old external sys.path hack.
+# Import the vendored transforms (src/retail) without the old external sys.path hack.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
-TEST_CATALOG = os.environ.get("BIMBO_TEST_CATALOG", "bimbo")
-TEST_SCHEMA = os.environ.get("BIMBO_TEST_SCHEMA", "dev")
+TEST_CATALOG = os.environ.get("MODELOPS_TEST_CATALOG", "malcoln_aws_stable_catalog")
+TEST_SCHEMA = os.environ.get("MODELOPS_TEST_SCHEMA", "agentic2_mlops_dev")
 
 
 @pytest.fixture(scope="session")

@@ -10,7 +10,7 @@ endpoint type"*; docs: *"agent endpoints currently only support inference tables
 
 | Feature | Agent endpoint (`modelops-reviewer`) | Dedicated FM gateway endpoint |
 |---|---|---|
-| Inference-table payload logging | ✅ enabled → `bimbo_demo.dev.modelops_reviewer_payload` | ✅ |
+| Inference-table payload logging | ✅ enabled → `malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer_payload` | ✅ |
 | Usage tracking (tokens/cost) | ❌ unsupported on agent endpoints | ✅ |
 | PII / safety guardrails | ❌ unsupported on agent endpoints | ✅ (input + output) |
 | Rate limits | ❌ unsupported on agent endpoints | ✅ |

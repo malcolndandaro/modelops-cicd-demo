@@ -1,97 +1,135 @@
-# ModelOps Reviewer — CI/CD E2E con un agente de IA en Databricks
+# ModelOps CI/CD Demo — Two AI Gates for ML Model Promotion on Databricks
 
-> Demo de CI/CD de extremo a extremo para el equipo de plataforma de Grupo Bimbo
-> ("ModelOps"). El protagonista es el **ModelOps Reviewer**: un revisor de código por
-> IA que corre como un asset gobernado de Databricks y se integra al pipeline de
-> GitHub Actions — revisa PRs, los corrige a pedido, y promueve el código por
-> `dev → qa → prod`.
+End-to-end CI/CD demo for ML assets on Databricks. The headline: **two AI validation
+gates** protect every model promotion — one at PR time, one at deployment time.
 
-## La idea en una línea
+## The idea in one line
 
-> En cada PR, los linters determinísticos atrapan la **sintaxis** (Ruff, sqlfluff,
-> `bundle validate`) y el **ModelOps Reviewer** —un agente que conoce los estándares
-> de Bimbo— atrapa lo **semántico/de política** que ninguna herramienta determinística
-> ve (p. ej. un job de *dev* que referencia el catálogo de *producción* `bimbo_prd`).
-> Solo los hallazgos **BLOCKER** bloquean; el humano sigue aprobando.
+> On every PR, deterministic linters catch **syntax** (Ruff, sqlfluff, `bundle validate`)
+> and **Gate 1** (a KA-grounded AI reviewer) catches **semantic/policy** problems no
+> tool can detect (e.g., a dev config referencing the prod schema). After merge,
+> **Gate 2** (an LLM-driven promotion gate) compares the challenger model's metrics to
+> the current champion and blocks promotion if quality degrades. Only BLOCKER findings
+> block; humans still approve each environment promotion.
 
-## Qué es el ModelOps Reviewer
+## What is the ModelOps Reviewer (Gate 1)
 
-Un **MLflow `ResponsesAgent`** desplegado en **Databricks Model Serving** (endpoint
-`modelops-reviewer`), aterrizado sobre el **ModelOps Handbook** (22 reglas de estándares)
-vía **Vector Search**, y potenciado por **Claude** (`databricks-glm-5-2`).
+An **MLflow `ResponsesAgent`** deployed on **Databricks Model Serving**
+(endpoint `modelops-reviewer`), grounded on the **ModelOps Handbook** (ML + platform
+standards) via a **Knowledge Assistant** (`modelops-handbook-ka`), powered by
+`databricks-glm-5-2`.
 
-- **Modo review** (automático en cada PR): publica hallazgos **citados, en español** +
-  un **Check Run `ModelOps Reviewer`** que gatea el merge por severidad.
-- **Modo fix** (`/modelops-fix`, disparado por un humano): el bot **reescribe el archivo
-  y hace push** de un commit a la rama del PR, que re-dispara la revisión (bucle
-  auto-correctivo).
-- **Agent-as-code:** el revisor se construye/despliega/evalúa con el **mismo pipeline
-  que vigila** (un job de DABs lo arma: index → registro UC → deploy → eval).
+- **Review mode** (auto on every PR): posts cited English findings + a
+  **`ModelOps Reviewer` Check Run** that gates the merge by severity.
+- **Fix mode** (`/modelops-fix`, human-triggered): the bot opens a **new PR against
+  the original PR's head branch** with the fix applied, which re-triggers the review
+  (self-correcting loop).
+- **Agent-as-code**: the reviewer is built, deployed, and evaluated by the **same
+  pipeline it guards** (a DABs job: index → register → deploy → eval).
 
-## El pipeline (GitHub Actions + Databricks Asset Bundles)
+## What is the Promotion Gate (Gate 2)
+
+After merge, a `model_training_job` runs:
+1. **train** — trains a `demand_forecaster` (RandomForestRegressor, scikit-learn),
+   logs the run to MLflow 3.
+2. **register** — registers the model to Unity Catalog as
+   `<catalog>.<schema>.demand_forecaster`; new version receives the `@challenger` alias.
+3. **promotion_gate** — an LLM (GLM-5-2) compares challenger vs champion metrics +
+   the training-config diff against the ML handbook rules; returns `APPROVE` or `BLOCK`
+   with cited findings and justification (MLflow-traced).
+4. **promote** — if `APPROVE`, moves `@champion` to the challenger; otherwise the job
+   fails with the gate's reasoning.
+
+## The pipeline (GitHub Actions + Databricks Asset Bundles)
 
 ```
-PR  →  pr-checks (Ruff + sqlfluff + bundle validate)  +  modelops-review (Check Run por severidad)
-    →  /modelops-fix (el bot corrige y hace push)  →  aprobación humana + merge a main
-    →  deploy-dev + tests de integración serverless  →  [gate qa]  →  [gate prod]
+PR  →  pr-checks (Ruff + sqlfluff + bundle validate)  +  modelops-review (Gate 1 Check Run)
+    →  /modelops-fix (bot opens fix PR)  →  human approval + merge to main
+    →  deploy-dev + Gate 2 (train → register → gate → promote)
+    →  [gate qa]  →  deploy-qa  →  [gate prod]  →  deploy-prod
 ```
 
-| Workflow (`.github/workflows/`) | Qué hace |
+| Workflow (`.github/workflows/`) | What it does |
 |---|---|
-| `pr-checks.yml` | Linters determinísticos (sintaxis) + `bundle validate` para dev/qa/prd |
-| `modelops-review.yml` | El agente revisa el diff y publica el Check Run gateado por severidad (ADR-0002) |
-| `modelops-fix.yml` | `/modelops-fix` → el bot reescribe y hace push (identidad propia, ADR-0003) |
-| `deploy.yml` | Post-merge: dev + tests → **gate qa** → **gate prod** (GitHub Environments) |
+| `pr-checks.yml` | Deterministic linters (syntax) + `bundle validate` for dev/qa/prd |
+| `modelops-review.yml` | Gate 1: agent reviews diff, posts severity-gated Check Run |
+| `modelops-fix.yml` | `/modelops-fix` → bot opens a fix PR against the original PR's branch |
+| `deploy.yml` | Post-merge: dev deploy + Gate 2 → **gate qa** → **gate prod** |
 
-## Estructura del repo
+## Demo scenarios
+
+Two bad-PR scenarios under `bad-pr/`:
+
+| Scenario | What it does | Which gate catches it | Rule |
+|---|---|---|---|
+| `bad-pr/ml-review-blocker/` | Hyperparameter change without updating regression test + cross-env config reference | **Gate 1 BLOCKS** | ML-01, ENV-01 |
+| `bad-pr/ml-gate-blocker/` | Clean change that passes review but degrades the model | Gate 1 passes, **Gate 2 BLOCKS** | ML-03 |
+
+## Repo structure
 
 ```
-modelops_reviewer/      ← el agente
-  agent/               core puro (review_core.py) + ResponsesAgent + log/deploy
-  ci/                  shells de CI: review_pr.py (comentario + Check Run), fix_pr.py (push)
-  index/               construye la tabla del Handbook + el índice de Vector Search
-  eval/                harness mlflow.genai.evaluate (gate de regresión)
-  gateway/             configuración y reporte de costo de AI Gateway
-  tests/               37 unit tests del core puro
-modelops_handbook/      22 reglas de estándares (la base de conocimiento del agente)
-src/                   pipeline "bakery": bakery/transforms.py (Transform pattern) + job
-data/seed_bakery.py    generador sintético de las tablas fuente (recuperación)
-sql/  resources/  tests/  bad-pr/
-docs/                  traducción a Azure DevOps (ado-translation.md + azure-pipelines-*.yml)
-databricks.yml         bundle bimbo-bakery-pipeline; targets dev/qa/prd
+modelops_reviewer/      ← Gate 1: the reviewer agent
+  agent/               pure functional core (review_core.py) + ResponsesAgent + log/deploy
+  ci/                  CI shells: review_pr.py (comment + Check Run), fix_pr.py (new fix PR)
+  index/               builds handbook table + Vector Search index
+  eval/                mlflow.genai.evaluate harness (regression gate)
+  gateway/             AI Gateway config and cost report
+  tests/               37 unit tests over the pure core
+modelops_handbook/      ML + platform standards (the Knowledge Base for Gate 1 + Gate 2)
+src/
+  ml/                  Gate 2: train.py, register.py, promotion_gate.py, promote.py, config.yml
+  retail/              Retail pipeline transforms (pure functions, transform-pattern)
+  jobs/                Retail pricing jobs (supporting DE pipeline)
+  daily_route_profitability.py   Retail job entrypoint
+data/seed_retail.py    Synthetic seed generator for fact_sales / dim_store source tables
+tests/                 Unit tests (promotion_core, demand_forecaster, reviewer core) + integration
+bad-pr/                Anti-examples: ml-review-blocker/, ml-gate-blocker/, legacy linter examples
+resources/jobs/        DABs job YAML definitions
+sql/                   SQL assets
+docs/                  Azure DevOps translation guide (ado-translation.md + azure-pipelines-*.yml)
+databricks.yml         DABs bundle modelops-cicd-demo; targets dev/qa/prd
 ```
 
-## Cómo correr
+## How to run
 
 ```bash
-# Linters (lo que corre pr-checks)
-ruff check src/ && ruff format --check src/
+# Linters (what pr-checks runs)
+ruff check src/ modelops_reviewer/
 sqlfluff lint sql/
 
 # Bundle
-databricks bundle validate -t dev          # también -t qa, -t prd
-databricks bundle deploy   -t dev
+DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks bundle validate -t dev
+DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks bundle deploy -t dev
 
-# Unit tests del core del agente (sin workspace)
-pytest modelops_reviewer/tests/ -v
+# Unit tests (no workspace needed)
+pytest modelops_reviewer/tests/ tests/test_promotion_core.py tests/test_demand_forecaster.py -v
 
-# (Re)desplegar el agente de punta a punta — index → registro → deploy → eval
-databricks bundle run modelops_agent_lifecycle -t dev
+# Seed source tables (Databricks Connect serverless)
+DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws python data/seed_retail.py
+
+# Deploy Gate 1 agent end-to-end (index → register → deploy → eval)
+DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks bundle run modelops_agent_lifecycle -t dev
+
+# Reset demo state (PRs, branches, UC model aliases)
+bash scripts/reset_demo.sh
 ```
 
-## Documentación
+## Documentation
 
-- **`CLAUDE.md`** — orientación completa: arquitectura, mapa del repo, convenciones, assets en vivo.
-- **`DEMO.md`** — runbook paso a paso del demo en vivo (con guion en español y plan de respaldo).
-- **`docs/ado-translation.md`** — paridad con Azure DevOps (el stack real de Bimbo).
-- `CONTEXT.md`, los 3 ADRs y `REBUILD.md` (runbook de recuperación) viven en el workspace local `/bimbo`, fuera de este repo público.
+- **`CLAUDE.md`** — full architecture, repo map, conventions, live assets.
+- **`DEMO.md`** — step-by-step runbook in PT-BR (presenter's language).
+- **`docs/ado-translation.md`** — Azure DevOps parity guide.
 
-## Notas
+## Notes
 
-- Repo **público** — sin secretos ni identificadores del workspace. Los secretos viven en
-  GitHub Actions secrets; la config no-secreta en repo variables.
-- El hallazgo estrella del demo es a propósito una **referencia cross-env**, no un secreto
-  (Bimbo ya corre GitHub Secret Scanning) — por eso solo un agente con criterio lo atrapa.
-- Auth de CI a Databricks por **OAuth M2M** (OIDC federation es el take-home documentado).
-  Los jobs que tocan Databricks corren en un **runner self-hosted** (la IP-ACL del workspace
-  bloquea los runners hosted de GitHub).
+- Repo **public** — no secrets or workspace identifiers committed. Secrets live in
+  GitHub Actions secrets; non-secret config in repo variables.
+- CI authenticates to Databricks via **OAuth M2M** service principal. Every Databricks-
+  touching job runs on the **self-hosted runner** (VPN-only workspace).
+- Gate 1 reviewer is **advisory-never-block**: CI always exits 0; the Check Run
+  conclusion is the gate. A cold endpoint degrades to an advisory comment.
+- Gate 2 uses **Unity Catalog aliases** (`@champion`/`@challenger`) — no deprecated
+  workspace-registry stages.
+- **Env = schema** in this demo (single catalog `malcoln_aws_stable_catalog`, schemas
+  `agentic2_mlops_dev` / `agentic2_mlops_staging` / `agentic2_mlops_prod`). Future-state
+  recommendation is catalog-per-env isolation.

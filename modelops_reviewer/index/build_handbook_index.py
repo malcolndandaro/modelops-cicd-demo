@@ -30,8 +30,8 @@ from databricks.sdk.service.vectorsearch import (
     VectorIndexType,
 )
 
-CATALOG = "bimbo"
-SCHEMA = "dev"
+CATALOG = "malcoln_aws_stable_catalog"
+SCHEMA = "agentic2_mlops_dev"
 TABLE = f"{CATALOG}.{SCHEMA}.modelops_handbook_rules"
 INDEX = f"{CATALOG}.{SCHEMA}.modelops_handbook_rules_idx"
 VS_ENDPOINT = "modelops-vs"

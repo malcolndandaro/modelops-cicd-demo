@@ -1,13 +1,13 @@
-"""Serverless integration tests for the daily route-profitability pipeline (slice 07).
+"""Serverless integration tests for the daily route-profitability pipeline.
 
-Runs against bimbo.dev via Databricks Connect serverless — exercises the SAME
-vendored transform the job uses, against real UC tables. Robust to the existing
-seeded data (asserts structure + invariants, not hardcoded row counts).
+Runs via Databricks Connect serverless — exercises the SAME vendored transform
+the job uses, against real UC tables. Robust to the existing seeded data
+(asserts structure + invariants, not hardcoded row counts).
 """
 
 from __future__ import annotations
 
-from bakery.transforms import build_daily_route_profitability, normalize_sku
+from retail.transforms import build_daily_route_profitability, normalize_sku
 
 _AGG_COLUMNS = {
     "route_id",

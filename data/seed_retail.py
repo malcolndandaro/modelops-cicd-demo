@@ -1,20 +1,20 @@
-"""Seed the bakery source tables (`fact_sales` + `dim_store`) for `bimbo.<schema>`.
+"""Seed the retail source tables (`fact_sales` + `dim_store`) for the demo catalog/schema.
 
-Closes the recovery gap documented in REBUILD.md: these are the pipeline INPUT tables
-(read by `src/daily_route_profitability.py`, asserted populated by `tests/`). They were
+Closes the recovery gap: these are the pipeline INPUT tables (read by
+`src/daily_route_profitability.py`, asserted populated by `tests/`). They were
 originally pre-seeded with no in-repo generator; this script regenerates them
 synthetically so they are recoverable from the repo on a shared, mutable workspace.
 
 Run locally via Databricks Connect serverless:
-    DATABRICKS_AUTH_STORAGE=plaintext python data/seed_bakery.py            # -> bimbo.dev
-    BIMBO_SEED_SCHEMA=qa  python data/seed_bakery.py                        # -> bimbo.qa
+    DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws python data/seed_retail.py
+    MODELOPS_SEED_SCHEMA=agentic2_mlops_staging  python data/seed_retail.py
 or as a Databricks notebook/job task (uses the ambient `spark`).
 
 Idempotent: overwrites the tables. Synthetic data only — no PII, safe for a public repo.
 The SKU values are intentionally messy (mixed case, spaces, hyphens) so the pipeline's
 `normalize_sku` transform has real work to do in the demo.
 
-Schema produced (the exact columns `bakery/transforms.py` consumes):
+Schema produced (the exact columns `retail/transforms.py` consumes):
     dim_store(store_id, route_id, route_name, store_name)
     fact_sales(store_id, sku, quantity, unit_price, amount, is_active, sale_date)
 """
@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import os
 
-CATALOG = os.environ.get("BIMBO_SEED_CATALOG", "bimbo")
-SCHEMA = os.environ.get("BIMBO_SEED_SCHEMA", "dev")
-N_STORES = int(os.environ.get("BIMBO_SEED_STORES", "20"))
-N_SALES = int(os.environ.get("BIMBO_SEED_SALES", "5000"))
+CATALOG = os.environ.get("MODELOPS_SEED_CATALOG", "malcoln_aws_stable_catalog")
+SCHEMA = os.environ.get("MODELOPS_SEED_SCHEMA", "agentic2_mlops_dev")
+N_STORES = int(os.environ.get("MODELOPS_SEED_STORES", "20"))
+N_SALES = int(os.environ.get("MODELOPS_SEED_SALES", "5000"))
 
 # Ambient `spark` when run as a Databricks notebook/job; else a serverless Connect session.
 try:
@@ -38,37 +38,37 @@ except NameError:
 
 from pyspark.sql import functions as F  # noqa: E402 (import after the spark bootstrap above)
 
-ROUTES = [
-    ("R01", "Ruta Centro"),
-    ("R02", "Ruta Norte"),
-    ("R03", "Ruta Sur"),
-    ("R04", "Ruta Bajío"),
-    ("R05", "Ruta Occidente"),
+REGIONS = [
+    ("R01", "Region North"),
+    ("R02", "Region South"),
+    ("R03", "Region East"),
+    ("R04", "Region West"),
+    ("R05", "Region Central"),
 ]
 # Messy on purpose — exercises normalize_sku (uppercase + strip non-alphanumerics).
 SKUS = [
-    "pan-blanco 01", "Pan Integral-02", "DONA_03", "mantecada 04",
-    "modelops-05", "tortilla 06", "Bolillo_07", "concha-08",
-    "rol-canela 09", "multigrano 10", "panque-11", "galleta 12",
+    "bread-white 01", "Bread Whole-02", "MUFFIN_03", "croissant 04",
+    "bagel-05", "tortilla 06", "Roll_07", "donut-08",
+    "cinnamon-roll 09", "multigrain 10", "cake-11", "cookie 12",
 ]
 
-routes_col = F.array(
-    *[F.struct(F.lit(r).alias("route_id"), F.lit(n).alias("route_name")) for r, n in ROUTES]
+regions_col = F.array(
+    *[F.struct(F.lit(r).alias("route_id"), F.lit(n).alias("route_name")) for r, n in REGIONS]
 )
 skus_col = F.array(*[F.lit(s) for s in SKUS])
 
-# dim_store — N_STORES tiendas repartidas round-robin entre las 5 rutas.
+# dim_store — N_STORES stores distributed round-robin across 5 regions.
 dim_store = (
     spark.range(N_STORES)
     .withColumn("store_id", F.format_string("S%03d", (F.col("id") + 1).cast("int")))
-    .withColumn("_r", F.element_at(routes_col, (F.col("id") % F.lit(len(ROUTES)) + 1).cast("int")))
+    .withColumn("_r", F.element_at(regions_col, (F.col("id") % F.lit(len(REGIONS)) + 1).cast("int")))
     .withColumn("route_id", F.col("_r.route_id"))
     .withColumn("route_name", F.col("_r.route_name"))
-    .withColumn("store_name", F.format_string("Panadería %03d", (F.col("id") + 1).cast("int")))
+    .withColumn("store_name", F.format_string("Store %03d", (F.col("id") + 1).cast("int")))
     .select("store_id", "route_id", "route_name", "store_name")
 )
 
-# fact_sales — N_SALES ventas; ~10% devoluciones (quantity/amount negativos), ~85% activas.
+# fact_sales — N_SALES transactions; ~10% returns (quantity/amount negative), ~85% active.
 fact_sales = (
     spark.range(N_SALES)
     .withColumn(
@@ -83,7 +83,7 @@ fact_sales = (
         .cast("int"),
     )
     .withColumn("unit_price", F.round(F.rand(2) * 40 + 5, 2))
-    # amount = quantity * unit_price → negativo en devoluciones
+    # amount = quantity * unit_price → negative on returns
     .withColumn("amount", F.round(F.col("quantity") * F.col("unit_price"), 2))
     .withColumn("is_active", F.rand(9) > 0.15)
     .withColumn(

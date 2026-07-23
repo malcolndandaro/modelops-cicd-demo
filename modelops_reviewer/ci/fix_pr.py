@@ -85,7 +85,8 @@ def retrieve_rules(query_text: str) -> list[dict]:
     """Handbook rules for the fix prompt — queries the Knowledge Assistant (KA) endpoint
     so the bot's fix follows the ACTUAL handbook, not just finding summaries.
     Best-effort: a fix still proceeds (on the finding citations) if retrieval fails."""
-    ka_endpoint = os.environ.get("KA_ENDPOINT", "modelops-handbook-ka")
+    # KA serving endpoint is auto-named by Agent Bricks (not the display name); overridable.
+    ka_endpoint = os.environ.get("KA_ENDPOINT", "ka-5f315d3c-endpoint")
     try:
         from databricks.sdk import WorkspaceClient  # lazy
 

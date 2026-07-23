@@ -1,13 +1,12 @@
-# ModelOps en Azure DevOps — guía de traducción
+# ModelOps on Azure DevOps — translation guide
 
-El demo corre sobre **GitHub Actions** porque es más rápido de montar un entorno.
-El stack real de Bimbo es **Azure DevOps (ADO)**. Este documento demuestra la
-paridad: cada workflow de GitHub tiene su pipeline ADO equivalente. **Casi todos**
-los gaps son de **sintaxis, no de capacidad** — mismos gates, misma separación de
-identidades, mismo agente. La única excepción real es el trigger por comentario de
-PR (`/modelops-fix`): ADO no lo tiene de forma nativa. El camino manual da paridad
-*funcional* sin infraestructura extra; la paridad *de trigger* exacta requiere una
-Azure Function de relay (~30 líneas). Detalle al final.
+The demo runs on **GitHub Actions** because it is faster to set up.
+Many customers run **Azure DevOps (ADO)** in production. This document demonstrates
+parity: each GitHub workflow has an equivalent ADO pipeline. **Almost all** gaps are
+**syntax, not capability** — same gates, same identity separation, same agent. The
+only real exception is the PR-comment trigger (`/modelops-fix`): ADO has no native
+equivalent. The manual run gives *functional* parity without extra infrastructure;
+exact trigger parity requires an Azure Function relay (~30 lines). Details at the end.
 
 ## Los cuatro pipelines
 
@@ -22,7 +21,7 @@ Azure Function de relay (~30 líneas). Detalle al final.
 
 | Concepto GitHub | Equivalente Azure DevOps | Notas |
 |---|---|---|
-| `runs-on: self-hosted` (`macos-bimbo`) | **Self-hosted agent pool** (`pool: name: …`) | Bimbo ya corre sus agentes dentro de la red corporativa allowlisted; mapea 1:1 |
+| `runs-on: self-hosted` | **Self-hosted agent pool** (`pool: name: …`) | The runner must be inside the corporate network (VPN-allowlisted); maps 1:1 |
 | `runs-on: ubuntu-latest` | `pool: vmImage: ubuntu-latest` | Solo para lint puro (sin acceso al workspace) |
 | `vars.*` (repo variables) | Variables de pipeline / **variable group** | No secretas; `modelops-databricks` agrupa `DATABRICKS_HOST`, `DATABRICKS_SP_CLIENT_ID` |
 | `secrets.*` | **Secret variables** del variable group (linkeado a Azure Key Vault opcional) | `DATABRICKS_CLIENT_SECRET`, `MODELOPS_BOT_TOKEN` |
@@ -43,7 +42,7 @@ Azure Function de relay (~30 líneas). Detalle al final.
 Es la pieza que más preguntan los equipos de plataforma, así que la dejamos explícita
 (ver también `../../docs/adr/0003-fix-mode-github-app-push.md`).
 
-| | GitHub (demo / producción) | Azure DevOps (producción Bimbo) |
+| | GitHub (demo / production) | Azure DevOps (production) |
 |---|---|---|
 | **Identidad de push del bot** | Fine-grained PAT (`MODELOPS_BOT_TOKEN`) → en prod, **GitHub App** "ModelOps Bot" | **Service connection** scoped a código / PAT de *service account* dedicado |
 | **Scope del permiso** | "Contents: write" solo a ramas de feature del PR | Permiso "Contribute" en Azure Repos, restringido a ramas de feature |
@@ -92,8 +91,8 @@ específico de plataforma es la **capa de publicación** al final de `review_pr.
 - **Fix push**: `git push` con `x-access-token` (GitHub) ↔ `git push` con PAT/service
   connection contra `dev.azure.com` (ADO). Mismo confinamiento a la rama del PR.
 
-Por eso el patrón *functional-core / imperative-shell* (el mismo que predicamos a
-Bimbo con el Transform pattern) paga aquí: portar a ADO toca solo el shell.
+This is why the *functional-core / imperative-shell* pattern pays off here:
+porting to ADO only touches the shell layer.
 
 > **Estado honesto:** la capa de publicación ADO (PR Status API, push a
 > `dev.azure.com`) está **especificada en estos pipelines, no implementada todavía**
@@ -102,14 +101,14 @@ Bimbo con el Transform pattern) paga aquí: portar a ADO toca solo el shell.
 > variables `AZDO_*` / `SYSTEM_ACCESSTOKEN` que setean los YAML ADO son el contrato
 > que ese shell consumiría.
 
-## Resumen para Bimbo
+## Summary
 
-> **Casi todos** los gaps entre GitHub y Azure DevOps en este demo son de
-> **sintaxis**, no de capacidad: mismos gates, misma separación de identidades,
-> mismo agente. La única salvedad es el trigger por comentario `/modelops-fix`, que
-> en ADO no es nativo — el trigger manual ya da paridad *funcional* sin
-> infraestructura, y una Azure Function de relay (~30 líneas) cierra la paridad de
-> *trigger* exacta.
+> **Almost all** gaps between GitHub Actions and Azure DevOps in this demo are
+> **syntax, not capability**: same gates, same identity separation, same agent.
+> The only exception is the `/modelops-fix` comment trigger, which has no native
+> ADO equivalent — the manual run already gives *functional* parity without extra
+> infrastructure, and an Azure Function relay (~30 lines) closes the exact trigger
+> parity gap.
 
 ### Pendientes documentados (no parte de este demo)
 - `docs/oidc-via-azure.md` — el camino OIDC `ADO Pipeline → Azure → Databricks SP`

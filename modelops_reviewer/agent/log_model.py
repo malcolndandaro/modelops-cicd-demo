@@ -7,6 +7,7 @@ alias to the new version. Validates the model loads + predicts locally before de
 
 from __future__ import annotations
 
+import os
 import pathlib
 
 import mlflow
@@ -18,7 +19,8 @@ EXPERIMENT = "/Users/malcoln.dandaro@databricks.com/modelops_reviewer/experiment
 AGENT_FILE = str(pathlib.Path(__file__).with_name("agent.py"))
 CORE_FILE = str(pathlib.Path(__file__).with_name("review_core.py"))
 LLM_ENDPOINT = "databricks-glm-5-2"
-KA_ENDPOINT = "modelops-handbook-ka"
+# KA serving endpoint is auto-named by Agent Bricks (not the display name); overridable.
+KA_ENDPOINT = os.environ.get("KA_ENDPOINT", "ka-5f315d3c-endpoint")
 
 mlflow.set_tracking_uri("databricks")  # log to the workspace, not local ./mlruns
 mlflow.set_registry_uri("databricks-uc")

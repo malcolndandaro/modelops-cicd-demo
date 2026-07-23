@@ -1,4 +1,4 @@
-"""Job de precios estacionales por temporada (ModelOps demo)."""
+"""Seasonal pricing job for the retail pipeline (ModelOps demo)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pyspark.sql.window import Window
 
 
 def add_seasonal_price(season_factor: float) -> Callable[[DataFrame], DataFrame]:
-    """Devuelve un transform que aplica el factor estacional al precio ancla."""
+    """Return a transform that applies a seasonal factor to the anchor price."""
 
     def _transform(sales: DataFrame) -> DataFrame:
         return sales.withColumn(
@@ -22,7 +22,7 @@ def add_seasonal_price(season_factor: float) -> Callable[[DataFrame], DataFrame]
 
 
 def attach_anchor_price(baseline: DataFrame) -> Callable[[DataFrame], DataFrame]:
-    """Devuelve un transform que adjunta el precio ancla de forma declarativa."""
+    """Return a transform that declaratively attaches the anchor price from baseline."""
 
     season_window = Window.orderBy("season")
     anchor = (
@@ -43,7 +43,7 @@ def build_seasonal_prices(
     schema: str,
     season_factor: float,
 ) -> DataFrame:
-    """Genera los precios estacionales a partir de la línea base del ambiente."""
+    """Build seasonal prices from the environment's baseline table."""
     baseline = spark.read.table(f"{catalog}.{schema}.seasonal_baseline")
     sales = spark.read.table(f"{catalog}.{schema}.fact_sales")
 

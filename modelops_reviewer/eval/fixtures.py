@@ -27,7 +27,7 @@ def build_eval_dataset() -> list[dict]:
             {"has_cross_env": True, "has_transform_issue": True, "is_clean": False},
         ),
         (
-            "src/bakery/clean_pipeline.py",
+            "src/retail/clean_pipeline.py",
             (_FIXTURES / "clean_code.py").read_text(encoding="utf-8"),
             {"has_cross_env": False, "has_transform_issue": False, "is_clean": True},
         ),

@@ -4,20 +4,20 @@
 # hallazgo BLOCKER deja el status en `failed`, y una *branch policy* que exige
 # ese status bloquea el merge (equivale al Check Run "failure" de GitHub).
 #
-# Auth a Databricks: el demo usa M2M (variable group). En producción Bimbo puede
-# usar OIDC/WIF como el pipeline de deploy — el script solo lee variables de
-# entorno DATABRICKS_*. Ver `ado-translation.md` (mismo directorio).
+# Auth to Databricks: the demo uses M2M (variable group). In production you can
+# use OIDC/WIF like the deploy pipeline — the script reads DATABRICKS_* env vars.
+# See `ado-translation.md` (same directory).
 
 pr:
   branches:
     include: [main]
-  # ADO dispara el PR build en open / push-to-source / reopen por defecto,
-  # equivalente a los tipos opened/synchronize/reopened de GitHub.
+  # ADO fires the PR build on open/push-to-source/reopen by default,
+  # equivalent to GitHub's opened/synchronize/reopened event types.
 
-trigger: none            # no en push a ramas; solo en PR
+trigger: none            # not on branch pushes; PRs only
 
 pool:
-  name: 'Bimbo-OnPrem'   # agente self-hosted (= runs-on: self-hosted)
+  name: 'ModelOps-OnPrem'   # self-hosted agent (= runs-on: self-hosted)
 
 variables:
   - group: modelops-databricks

@@ -88,7 +88,7 @@ jobs:
       DATABRICKS_AUTH_TYPE: oauth-m2m
       DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_SP_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-      BIMBO_TEST_SCHEMA: dev
+      MODELOPS_TEST_SCHEMA: agentic2_mlops_dev
       PR_SUFFIX: "-pr${{ github.event.pull_request.number }}"
     steps:
       - uses: actions/checkout@v4

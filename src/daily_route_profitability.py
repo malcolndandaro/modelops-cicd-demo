@@ -1,16 +1,16 @@
 # Databricks notebook source
-"""Job entrypoint — calcula profitability diaria por ruta.
+"""Job entrypoint — computes daily route profitability for the retail pipeline.
 
-Capa de orquestación: lee tablas, llama transforms puros (vendorizados en
-`bakery/`, hermano de este archivo), escribe resultados. Vive junto a `bakery/`
-para que Databricks lo tenga en el sys.path al ejecutar el notebook (sin hacks).
+Orchestration layer: reads tables, calls the pure transforms vendored in
+`retail/` (sibling of this file), writes results. Lives next to `retail/`
+so Databricks has it on sys.path when running the notebook (no hacks needed).
 """
 
-from bakery.transforms import build_daily_route_profitability
+from retail.transforms import build_daily_route_profitability
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "bimbo")
+dbutils.widgets.text("catalog", "malcoln_aws_stable_catalog")
 dbutils.widgets.text("schema", "dev")
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")

@@ -1,8 +1,8 @@
 {
   "inference_table_config": {
     "enabled": true,
-    "catalog_name": "bimbo",
-    "schema_name": "dev",
+    "catalog_name": "malcoln_aws_stable_catalog",
+    "schema_name": "agentic2_mlops_dev",
     "table_name_prefix": "modelops_reviewer"
   }
 }

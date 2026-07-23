@@ -21,16 +21,16 @@ CHECKS = [
     {
         "label": "cross-environment prod reference from a dev job",
         "query": (
-            "un job de dev que referencia el catálogo bimbo_prd gold_pricing "
-            "de otro ambiente (cross-environment prod reference)"
+            "a dev job that references the prod schema agentic2_mlops_prod "
+            "from a dev context (cross-environment reference)"
         ),
         "expect_exact": "ENV-01",
     },
     {
         "label": "driver-side .collect() inside a transformation",
         "query": (
-            "usar .collect() para traer datos al driver dentro de una función "
-            "de transformación de PySpark"
+            "using .collect() to bring data to the driver inside a "
+            "PySpark transformation function"
         ),
         "expect_prefix": "TP-",
     },

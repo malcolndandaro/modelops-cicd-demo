@@ -13,6 +13,7 @@ review" loop.
 from __future__ import annotations
 
 import json
+import os
 
 import mlflow
 import review_core
@@ -22,7 +23,10 @@ from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import ResponsesAgentRequest, ResponsesAgentResponse
 
 LLM_ENDPOINT = "databricks-glm-5-2"
-KA_ENDPOINT = "modelops-handbook-ka"
+# The Knowledge Assistant's SERVING endpoint is auto-named by Agent Bricks (e.g.
+# "ka-5f315d3c-endpoint"), NOT the KA display name. Overridable via KA_ENDPOINT so a
+# demo reset that recreates the KA can repoint the reviewer without a code change.
+KA_ENDPOINT = os.environ.get("KA_ENDPOINT", "ka-5f315d3c-endpoint")
 
 
 def _input_text(req: ResponsesAgentRequest) -> str:

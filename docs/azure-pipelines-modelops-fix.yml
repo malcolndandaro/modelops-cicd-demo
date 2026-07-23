@@ -22,7 +22,7 @@ trigger: none
 pr: none
 
 pool:
-  name: 'Bimbo-OnPrem'
+  name: 'ModelOps-OnPrem'
 
 variables:
   - group: modelops-databricks

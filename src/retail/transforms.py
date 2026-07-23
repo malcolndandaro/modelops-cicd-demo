@@ -1,12 +1,11 @@
-"""Transformaciones puras sobre DataFrames de ventas de panadería.
+"""Pure DataFrame transforms for the retail sales pipeline.
 
-Cada función recibe un DataFrame y devuelve un DataFrame — sin efectos
-secundarios, sin lectura/escritura, sin SparkSession en parámetros. Esto las
-hace componibles con `df.transform(fn)` y testeables con pytest. Vendorizado en
-este repo (antes vivía en el snippet 01 vía un `sys.path` externo) para que el
-job y los tests de integración lo importen sin hacks.
+Each function takes a DataFrame and returns a DataFrame — no side effects,
+no reads/writes, no SparkSession in parameters. This makes them composable
+via `df.transform(fn)` and testable with pytest. Vendored into this repo
+so the job and integration tests can import it without sys.path hacks.
 
-Referencia: https://community.databricks.com/t5/technical-blog/how-to-use-the-transform-pattern-in-pyspark-for-modular-and/ba-p/117522
+Reference: https://community.databricks.com/t5/technical-blog/how-to-use-the-transform-pattern-in-pyspark-for-modular-and/ba-p/117522
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from pyspark.sql import functions as F
 
 
 def normalize_sku(df: DataFrame) -> DataFrame:
-    """Normaliza el código SKU: uppercase, sin espacios ni caracteres especiales."""
+    """Normalize the SKU code: uppercase, strip spaces and special characters."""
     return df.withColumn(
         "sku",
         F.upper(F.regexp_replace(F.col("sku"), r"[^A-Za-z0-9]", "")),
@@ -24,21 +23,21 @@ def normalize_sku(df: DataFrame) -> DataFrame:
 
 
 def filter_active_products(df: DataFrame) -> DataFrame:
-    """Conserva solo productos activos."""
+    """Keep only active products."""
     return df.filter(F.col("is_active"))
 
 
 def mark_returns(df: DataFrame) -> DataFrame:
-    """Marca rows de devolución (quantity < 0) y normaliza el signo."""
+    """Mark return rows (quantity < 0) and normalize the sign."""
     return df.withColumn("is_return", F.col("quantity") < 0).withColumn(
         "abs_quantity", F.abs(F.col("quantity"))
     )
 
 
 def enrich_with_route(routes_df: DataFrame):
-    """Currying: devuelve un transform que enriquece ventas con info de ruta.
+    """Currying: returns a transform that enriches sales rows with store/route info.
 
-    Uso: `sales_df.transform(enrich_with_route(routes_df))`.
+    Usage: `sales_df.transform(enrich_with_route(routes_df))`.
     """
 
     def _apply(sales_df: DataFrame) -> DataFrame:
@@ -48,7 +47,7 @@ def enrich_with_route(routes_df: DataFrame):
 
 
 def calculate_route_revenue(df: DataFrame) -> DataFrame:
-    """Agrega revenue por ruta, separando ventas de devoluciones."""
+    """Aggregate revenue by route, separating sales from returns."""
     return df.groupBy("route_id", "route_name").agg(
         F.sum(F.when(~F.col("is_return"), F.col("amount")).otherwise(0)).alias("gross_revenue"),
         F.sum(F.when(F.col("is_return"), F.col("amount")).otherwise(0)).alias("returns_amount"),
@@ -58,7 +57,7 @@ def calculate_route_revenue(df: DataFrame) -> DataFrame:
 
 
 def build_daily_route_profitability(sales_df: DataFrame, routes_df: DataFrame) -> DataFrame:
-    """Pipeline completo en estilo transform-pattern: cada paso independiente y testeable."""
+    """Full pipeline in transform-pattern style: each step is independent and testable."""
     return (
         sales_df.transform(normalize_sku)
         .transform(filter_active_products)
