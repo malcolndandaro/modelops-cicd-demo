@@ -236,8 +236,10 @@ def run_gate() -> None:
             )
 
         if challenger_metrics is None:
-            print("ERROR: No @challenger alias found. Run register.py first.")
-            sys.exit(1)
+            # Raise (not sys.exit) — on the serverless notebook wrapper ANY SystemExit is
+            # reported as a task failure, so we fail the task by raising, which correctly
+            # skips the downstream 'promote' task.
+            raise RuntimeError("No @challenger alias found. Run register.py first.")
 
         # --- Bootstrap check -----------------------------------------------
         bootstrap = promotion_core.bootstrap_decision(champion_exists)
@@ -245,7 +247,8 @@ def run_gate() -> None:
             print("Bootstrap: no champion found — auto-approving.")
             print(f"Justification: {bootstrap['justification']}")
             mlflow.log_param("gate_decision", "APPROVE_BOOTSTRAP")
-            sys.exit(0)
+            # APPROVE → return normally so the 'promote' task runs.
+            return
 
         # --- Span 2: metric comparison + config diff -----------------------
         with mlflow.start_span("build_prompt") as span:
@@ -332,11 +335,14 @@ def run_gate() -> None:
 
     if decision == "APPROVE":
         print("Gate APPROVED — the promote task will run.")
-        sys.exit(0)
-    else:
-        print("Gate BLOCKED — promotion denied. See findings above.")
-        print("The 'promote' task will NOT run (job fails here).")
-        sys.exit(1)
+        # Return normally → task succeeds → downstream 'promote' runs.
+        return
+    # BLOCK → raise so the task fails and 'promote' is skipped. On the serverless
+    # notebook wrapper, sys.exit(0) would ALSO raise SystemExit and be reported as a
+    # failure — so APPROVE must return, and BLOCK must raise a real exception.
+    raise RuntimeError(
+        f"Promotion gate BLOCKED — promotion denied. Justification: {justification}"
+    )
 
 
 def main() -> None:

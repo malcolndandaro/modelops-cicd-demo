@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import sys
 import tempfile
 from typing import Any
 
@@ -228,4 +227,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Call main() directly (not sys.exit(main())): on the serverless notebook exec
+    # wrapper, raising SystemExit — even SystemExit(None) — is reported as a task failure.
+    main()

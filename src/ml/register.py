@@ -115,4 +115,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Call main() directly: on the serverless notebook exec wrapper, raising SystemExit
+    # (even with code 0/None) is reported as a task failure.
+    main()
