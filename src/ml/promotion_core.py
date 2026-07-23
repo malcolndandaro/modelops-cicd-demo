@@ -4,7 +4,9 @@ No I/O, no SDK calls, no network — fully unit-testable with plain data.
 The imperative shell (promotion_gate.py) imports these; the MlflowClient reads,
 LLM call, and MLflow tracing live there.
 
-Four cores:
+Five cores:
+  - parse_handbook_rules(text)
+      → compact rule string parsed from the `### [RULE-ID]` handbook format
   - build_promotion_prompt(challenger_metrics, champion_metrics, config_diff, ml_rules)
       → (system, user) prompt strings
   - parse_decision(raw)
@@ -263,7 +265,93 @@ def bootstrap_decision(champion_exists: bool) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Core 4: metric comparison
+# Core 4: handbook parser — convert handbook markdown to compact rule lines
+# ---------------------------------------------------------------------------
+
+# Matches the handbook's ### [RULE-ID] heading format
+_RULE_HEADING = re.compile(r"^###\s+\[(?P<rule_id>[A-Z]+-\d+)\]\s+(?P<title>.+)$")
+_SEVERITY_LINE = re.compile(r"\*\*Severity:\*\*\s*(?P<severity>BLOCKER|SUGGESTION|STYLE)")
+_CITATION_LINE = re.compile(r"\*\*Citation:\*\*\s*(?P<citation>.+)")
+
+
+def parse_handbook_rules(text: str) -> str:
+    """Parse a handbook markdown file into compact prompt-ready rule lines.
+
+    Reads the `### [RULE-ID] Title` / `**Severity:**` / `**Citation:**` structure
+    from modelops_handbook/ml-model-lifecycle.md (and any file sharing that format)
+    and converts each rule block into a single compact line:
+
+        - ML-01 [BLOCKER] (Citation: ModelOps Handbook › ML Model Lifecycle › ML-01):
+          A hyperparameter or feature change requires updating the metric-regression test ...
+
+    Strips the ❌/✅ example lines to keep the prompt concise.  Falls back to
+    DEFAULT_ML_RULES (returned unchanged) if `text` contains no rule headings.
+    """
+    rules: list[str] = []
+    lines = (text or "").splitlines()
+
+    cur_id: str | None = None
+    cur_title: str | None = None
+    cur_severity: str = "SUGGESTION"
+    cur_citation: str = ""
+    cur_body: list[str] = []
+
+    def _flush() -> None:
+        if cur_id is None:
+            return
+        body = " ".join(
+            ln.strip()
+            for ln in cur_body
+            if ln.strip()
+            and not ln.strip().startswith("❌")
+            and not ln.strip().startswith("✅")
+            and not ln.strip().startswith("-")  # skip sub-bullets
+            and "**Severity:**" not in ln
+            and "**Citation:**" not in ln
+        )
+        # Use title as body if body is empty after filtering
+        body = body.strip() or (cur_title or "")
+        citation = cur_citation.strip() or f"ModelOps Handbook › ML Model Lifecycle › {cur_id}"
+        rules.append(
+            f"- {cur_id} [{cur_severity}] (Citation: {citation}): {body[:400]}"
+        )
+
+    for line in lines:
+        m_heading = _RULE_HEADING.match(line)
+        if m_heading:
+            _flush()
+            cur_id = m_heading.group("rule_id")
+            cur_title = m_heading.group("title").strip()
+            cur_severity = "SUGGESTION"
+            cur_citation = ""
+            cur_body = []
+            continue
+
+        if cur_id is None:
+            continue
+
+        m_sev = _SEVERITY_LINE.search(line)
+        if m_sev:
+            cur_severity = m_sev.group("severity")
+            continue
+
+        m_cit = _CITATION_LINE.search(line)
+        if m_cit:
+            cur_citation = m_cit.group("citation")
+            continue
+
+        cur_body.append(line)
+
+    _flush()  # flush last rule
+
+    if not rules:
+        return DEFAULT_ML_RULES
+
+    return "\n".join(rules)
+
+
+# ---------------------------------------------------------------------------
+# Core 5: metric comparison
 # ---------------------------------------------------------------------------
 
 def compare_metrics(challenger_mae: float, champion_mae: float) -> dict:

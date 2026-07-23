@@ -92,7 +92,7 @@ def render_comment(payload: dict) -> str:
     summary = (payload.get("summary") or "").strip()
     if not findings:
         tail = f" {summary}" if summary else ""
-        return "## 🤖 ModelOps Reviewer\n\n✅ Sin hallazgos contra el ModelOps Handbook." + tail
+        return "## 🤖 ModelOps Reviewer\n\n✅ No findings against the ModelOps Handbook." + tail
     lines = ["## 🤖 ModelOps Reviewer", ""]
     if summary:
         lines += [summary, ""]
@@ -102,13 +102,13 @@ def render_comment(payload: dict) -> str:
         lines.append(f"### {emoji} {f.get('severity')} — `{loc}` · {f.get('rule_id')}")
         lines.append(str(f.get("message", "")))
         if f.get("suggestion"):
-            lines.append(f"> **Sugerencia:** {f['suggestion']}")
+            lines.append(f"> **Suggestion:** {f['suggestion']}")
         lines.append(f"<sub>📖 {f.get('citation', '')}</sub>")
         lines.append("")
     n_block = sum(1 for f in findings if f.get("severity") == "BLOCKER")
     lines.append(
-        f"---\n_{len(findings)} hallazgo(s), {n_block} BLOCKER. Los BLOCKER ponen el "
-        "check «ModelOps Reviewer» en rojo; las sugerencias son asesoras y no bloquean._"
+        f"---\n_{len(findings)} finding(s), {n_block} BLOCKER. BLOCKERs set the "
+        "«ModelOps Reviewer» check to red; suggestions are advisory and do not block._"
     )
     return "\n".join(lines)
 
@@ -144,8 +144,8 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001 — any failure must stay non-blocking
             try:
                 post_comment(
-                    "⚠️ **ModelOps Reviewer** no está disponible ahora mismo; la revisión "
-                    "automática no bloquea este PR.\n\n"
+                    "⚠️ **ModelOps Reviewer** is not available right now; the automated "
+                    "review does not block this PR.\n\n"
                     f"```\n{type(e).__name__}: {str(e)[:300]}\n```"
                 )
             except Exception:  # noqa: BLE001 — even the fallback comment must never fail the check

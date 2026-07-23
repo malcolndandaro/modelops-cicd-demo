@@ -45,25 +45,30 @@ REGISTERED_MODEL_FQN = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
 LLM_ENDPOINT = "databricks-glm-5-2"
 
-# TODO: read ML rules from modelops_handbook/ml-model-lifecycle.md once it is
-# added by the handbook teammate.  See modelops_handbook/ and spec issue 0001.
-# For now the inline DEFAULT_ML_RULES from promotion_core are used.
 _HANDBOOK_PATH = _REPO_ROOT / "modelops_handbook" / "ml-model-lifecycle.md"
 
 
 def _load_ml_rules() -> str:
-    """Load ML handbook rules from the handbook file, fall back to inline defaults."""
+    """Load and parse ML handbook rules from ml-model-lifecycle.md.
+
+    Reads the `### [RULE-ID]` handbook format, parses each block into a compact
+    prompt-ready bullet line via promotion_core.parse_handbook_rules(), so the
+    rule IDs and citations exactly match the handbook.
+
+    Falls back to the inline DEFAULT_ML_RULES if the file is unreadable.
+    """
     if _HANDBOOK_PATH.exists():
         try:
             text = _HANDBOOK_PATH.read_text()
-            print(f"Loaded ML rules from {_HANDBOOK_PATH}")
-            return text
+            rules = promotion_core.parse_handbook_rules(text)
+            print(f"Loaded and parsed ML rules from {_HANDBOOK_PATH}")
+            return rules
         except OSError as e:
             print(f"Could not read handbook file: {e}. Using inline defaults.")
     else:
         print(
-            f"Handbook file not found at {_HANDBOOK_PATH}. Using inline defaults. "
-            "(Add modelops_handbook/ml-model-lifecycle.md to enable grounded rules.)"
+            f"Handbook file not found at {_HANDBOOK_PATH}. "
+            "Using inline defaults from promotion_core.DEFAULT_ML_RULES."
         )
     return promotion_core.DEFAULT_ML_RULES
 

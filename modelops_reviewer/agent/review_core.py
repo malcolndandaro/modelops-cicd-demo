@@ -92,51 +92,61 @@ def build_review_context(diff: str) -> dict:
 
 # --- Core 2: prompt assembly -----------------------------------------------------
 _SYSTEM = (
-    "Eres el ModelOps Reviewer, un revisor de código automático para Grupo Bimbo. "
-    "Revisas un diff de PR ÚNICAMENTE contra las reglas del ModelOps Handbook que se "
-    "te proporcionan. No inventes reglas. Cada hallazgo DEBE citar un rule_id de la "
-    "lista provista. Responde en español. Si no hay violaciones, devuelve findings vacío.\n\n"
-    "Linters determinísticos YA corren en cada PR y cubren sintaxis/estilo/seguridad-lint: "
-    "Ruff (Python: E/F/I/B/UP/SIM/S) y sqlfluff (SQL), más `databricks bundle validate`. "
-    "NO dupliques sus hallazgos. Concéntrate en la capa SEMÁNTICA/de política del Handbook "
-    "que ellos NO pueden detectar (cross-env, Transform pattern, secretos, naming, DABs).\n\n"
-    "Severidad: usa la severity_hint de la regla, pero ESCALA a BLOCKER cualquier "
-    "referencia a un catálogo de otro ambiente (p.ej. *_prd / prod desde dev) o un "
-    "secreto/credencial en código. STYLE para nits de formato.\n\n"
-    "Devuelve SOLO JSON válido, sin texto extra, con esta forma exacta:\n"
-    '{"summary": "<resumen 1 línea en español>", "findings": [{'
-    '"file": "<ruta>", "line": <entero o null>, "severity": "BLOCKER|SUGGESTION|STYLE", '
-    '"rule_id": "<id de la lista>", "citation": "<citation de la regla>", '
-    '"message": "<qué está mal, en español>", "suggestion": "<cómo arreglarlo, español o null>"}]}'
+    "You are the ModelOps Reviewer, an automated code reviewer for ModelOps. "
+    "You review a PR diff ONLY against the ModelOps Handbook rules provided. "
+    "Do not invent rules. Each finding MUST cite a rule_id from the provided list. "
+    "Respond in English. If there are no violations, return an empty findings list.\n\n"
+    "Deterministic linters ALREADY run on every PR and cover syntax/style/security-lint: "
+    "Ruff (Python: E/F/I/B/UP/SIM/S) and sqlfluff (SQL), plus `databricks bundle validate`. "
+    "DO NOT duplicate their findings. Focus on the SEMANTIC/policy layer of the Handbook "
+    "that they CANNOT detect (cross-env, Transform pattern, secrets, naming, DABs).\n\n"
+    "Severity: use the severity_hint from the rule, but ESCALATE to BLOCKER any "
+    "reference to another environment's catalog (e.g. *_prd / prod from dev) or a "
+    "secret/credential in code. STYLE for formatting nits.\n\n"
+    "Return ONLY valid JSON, with no extra text, in this exact form:\n"
+    '{"summary": "<one-line summary>", "findings": [{'
+    '"file": "<path>", "line": <integer or null>, "severity": "BLOCKER|SUGGESTION|STYLE", '
+    '"rule_id": "<id from the list>", "citation": "<rule citation>", '
+    '"message": "<what is wrong>", "suggestion": "<how to fix it or null>"}]}'
 )
 
 
-def build_review_prompt(context: dict, rules: list[dict]) -> tuple[str, str]:
-    """Return (system, user) messages. `rules` are retrieved handbook rows."""
+def build_review_prompt(
+    context: dict, rules: list[dict], grounding_text: str | None = None
+) -> tuple[str, str]:
+    """Return (system, user) messages.
+
+    `rules` are retrieved handbook rows (structured list). `grounding_text` is an
+    optional free-text grounding block from the Knowledge Assistant — if provided it
+    is appended after the structured rules block so the model gets both signals.
+    """
     rules_block = (
         "\n".join(
             f"- {r.get('rule_id')} [{r.get('severity_hint', 'SUGGESTION')}] "
             f"(citation: {r.get('citation')}): {r.get('content', r.get('title', '')).strip()[:400]}"
             for r in rules
         )
-        or "(sin reglas recuperadas)"
+        or "(no rules retrieved)"
     )
+
+    if grounding_text:
+        rules_block = rules_block + "\n\nKNOWLEDGE ASSISTANT GROUNDING:\n" + grounding_text.strip()
 
     files_block = []
     for f in context.get("files", []):
         if f.get("is_binary"):
-            files_block.append(f"### {f['path']} (binario — omitir)")
+            files_block.append(f"### {f['path']} (binary — skip)")
             continue
         added = "\n".join(f"  L{ln}: {code}" for ln, code in f.get("added", [])[:200])
         files_block.append(f"### {f['path']} ({f['language']})\n{added}")
-    files_text = "\n\n".join(files_block) or "(diff vacío)"
+    files_text = "\n\n".join(files_block) or "(empty diff)"
 
     user = (
-        "REGLAS DEL HANDBOOK (cita SOLO estos rule_id):\n"
+        "HANDBOOK RULES (cite ONLY these rule_id values):\n"
         f"{rules_block}\n\n"
-        "LÍNEAS AÑADIDAS EN EL PR (usa el número Lxx como `line`):\n"
+        "LINES ADDED IN THE PR (use the Lxx number as `line`):\n"
         f"{files_text}\n\n"
-        "Devuelve el JSON de hallazgos."
+        "Return the findings JSON."
     )
     return _SYSTEM, user
 
@@ -261,20 +271,20 @@ def decide_gate(findings: list[dict]) -> dict:
         return {
             "conclusion": "success",
             "blocker_count": 0,
-            "summary": "✅ Sin hallazgos contra el ModelOps Handbook.",
+            "summary": "✅ No findings against the ModelOps Handbook.",
         }
     if n_block:
         return {
             "conclusion": "failure",
             "blocker_count": n_block,
             "summary": (
-                f"🔴 {n_block} de {n} hallazgo(s) son BLOCKER — merge bloqueado hasta resolver."
+                f"🔴 {n_block} of {n} finding(s) are BLOCKER — merge blocked until resolved."
             ),
         }
     return {
         "conclusion": "neutral",
         "blocker_count": 0,
-        "summary": f"🟡 {n} hallazgo(s) asesor(es) — no bloquean el merge.",
+        "summary": f"🟡 {n} advisory finding(s) — do not block merge.",
     }
 
 
@@ -291,7 +301,7 @@ def to_check_run(findings: list[dict], decision: dict) -> dict:
         line = f.get("line") if isinstance(f.get("line"), int) and f["line"] >= 1 else 1
         msg = str(f.get("message", "")).strip()
         if f.get("suggestion"):
-            msg += f"\n\nSugerencia: {f['suggestion']}"
+            msg += f"\n\nSuggestion: {f['suggestion']}"
         if f.get("citation"):
             msg += f"\n\n📖 {f['citation']}"
         annotations.append(
@@ -309,10 +319,10 @@ def to_check_run(findings: list[dict], decision: dict) -> dict:
     if len(annotations) > MAX_ANNOTATIONS:
         extra = len(annotations) - MAX_ANNOTATIONS
         annotations = annotations[:MAX_ANNOTATIONS]
-        summary += f"\n\n_(+{extra} hallazgo(s) adicionales no anotados; límite de 50 de GitHub.)_"
+        summary += f"\n\n_(+{extra} additional finding(s) not annotated; GitHub's limit is 50.)_"
     titles = {
         "failure": "ModelOps Reviewer — BLOCKER",
-        "neutral": "ModelOps Reviewer — sugerencias",
+        "neutral": "ModelOps Reviewer — suggestions",
         "success": "ModelOps Reviewer — OK",
     }
     return {
@@ -330,24 +340,24 @@ def to_check_run(findings: list[dict], decision: dict) -> dict:
 # unified-diff application), then validates it parses before the bot pushes.
 _WRITE_PERMS = ("write", "maintain", "admin")
 _FIX_SYSTEM = (
-    "Eres el ModelOps Reviewer en MODO ARREGLO. Recibes el contenido COMPLETO de un "
-    "archivo, las REGLAS relevantes del ModelOps Handbook, y una lista de hallazgos. "
-    "Devuelve el contenido COMPLETO y corregido del archivo que: "
-    "(1) resuelve los hallazgos SIGUIENDO las convenciones del ModelOps Handbook; "
-    "(2) NO introduce nuevas violaciones del Handbook; "
-    "(3) PASA los linters determinísticos — Ruff en Python (E/F/I/B/UP/SIM/S: imports en "
-    "líneas separadas y todos usados, `is None` en vez de `== None`, sin `except:` desnudo, "
-    "sin defaults mutables, f-strings en vez de .format, etc.) y sqlfluff en SQL (keywords "
-    "en MAYÚSCULAS, alias con AS, sin identificadores que sean palabras reservadas); y "
-    "(4) preserva el resto del código y su comportamiento. "
-    "No expliques nada: devuelve SOLO el archivo corregido dentro de un único bloque "
-    "```...``` (sin texto fuera del bloque)."
+    "You are the ModelOps Reviewer in FIX MODE. You receive the COMPLETE content of a "
+    "file, the relevant ModelOps Handbook RULES, and a list of findings. "
+    "Return the COMPLETE corrected file that: "
+    "(1) resolves the findings FOLLOWING the ModelOps Handbook conventions; "
+    "(2) does NOT introduce new Handbook violations; "
+    "(3) PASSES the deterministic linters — Ruff in Python (E/F/I/B/UP/SIM/S: imports on "
+    "separate lines and all used, `is None` instead of `== None`, no bare `except:`, "
+    "no mutable defaults, f-strings instead of .format, etc.) and sqlfluff in SQL (keywords "
+    "in UPPERCASE, aliases with AS, no reserved word identifiers); and "
+    "(4) preserves the rest of the code and its behavior. "
+    "Do not explain anything: return ONLY the corrected file inside a single "
+    "```...``` block (no text outside the block)."
 )
 _FIX_RETRY_SYSTEM = (
-    "Eres el ModelOps Reviewer en MODO ARREGLO (REINTENTO). Tu intento anterior de corregir "
-    "un archivo FALLÓ el linter. Corrige EXACTAMENTE esos errores de linter SIN reintroducir "
-    "violaciones del ModelOps Handbook ni cambiar el comportamiento. Devuelve SOLO el archivo "
-    "COMPLETO corregido dentro de un único bloque ```...``` (sin texto fuera del bloque)."
+    "You are the ModelOps Reviewer in FIX MODE (RETRY). Your previous attempt to fix "
+    "a file FAILED the linter. Fix EXACTLY those linter errors WITHOUT reintroducing "
+    "ModelOps Handbook violations or changing behavior. Return ONLY the COMPLETE corrected "
+    "file inside a single ```...``` block (no text outside the block)."
 )
 _FENCE = re.compile(r"```[a-zA-Z0-9_+.-]*\n(?P<code>.*?)```", re.S)
 
@@ -357,9 +367,9 @@ def is_authorized(permission: str, branch_is_protected: bool) -> tuple[bool, str
     and never on a protected branch. `permission` is the GitHub collaborator role.
     """
     if branch_is_protected:
-        return False, "La rama destino está protegida; el bot no escribe en ramas protegidas."
+        return False, "The target branch is protected; the bot does not write to protected branches."
     if permission not in _WRITE_PERMS:
-        return False, f"Permiso insuficiente ('{permission}'); se requiere write/maintain/admin."
+        return False, f"Insufficient permission ('{permission}'); write/maintain/admin is required."
     return True, ""
 
 
@@ -369,10 +379,10 @@ def build_fix_prompt(
     issues = (
         "\n".join(
             f"- L{f.get('line')}: [{f.get('severity')}] {f.get('rule_id')} — {f.get('message')}"
-            + (f" (sugerencia: {f['suggestion']})" if f.get("suggestion") else "")
+            + (f" (suggestion: {f['suggestion']})" if f.get("suggestion") else "")
             for f in findings
         )
-        or "(sin hallazgos)"
+        or "(no findings)"
     )
     rules_block = (
         "\n".join(
@@ -380,14 +390,14 @@ def build_fix_prompt(
             f"{(r.get('content') or r.get('title') or '').strip()[:400]}"
             for r in (rules or [])
         )
-        or "(sin reglas adicionales — sigue las citadas en los hallazgos)"
+        or "(no additional rules — follow those cited in the findings)"
     )
     user = (
-        f"ARCHIVO: {path}\n\nREGLAS RELEVANTES DEL MODELOPS HANDBOOK:\n{rules_block}\n\n"
-        f"HALLAZGOS A CORREGIR:\n{issues}\n\n"
-        f"CONTENIDO ACTUAL:\n```\n{original}\n```\n\n"
-        "Devuelve el archivo COMPLETO corregido (siguiendo el Handbook y pasando los "
-        "linters Ruff/sqlfluff) en un solo bloque de código."
+        f"FILE: {path}\n\nRELEVANT MODELOPS HANDBOOK RULES:\n{rules_block}\n\n"
+        f"FINDINGS TO FIX:\n{issues}\n\n"
+        f"CURRENT CONTENT:\n```\n{original}\n```\n\n"
+        "Return the COMPLETE corrected file (following the Handbook and passing the "
+        "Ruff/sqlfluff linters) in a single code block."
     )
     return _FIX_SYSTEM, user
 
@@ -396,11 +406,11 @@ def build_fix_retry_prompt(path: str, attempted: str, lint_output: str) -> tuple
     """Pure: build the (system, user) for a second fix attempt after the first failed
     the linter. `lint_output` is the raw Ruff/sqlfluff output from the shell."""
     user = (
-        f"ARCHIVO: {path}\n\nTu intento anterior FALLÓ el linter con estos errores:\n"
+        f"FILE: {path}\n\nYour previous attempt FAILED the linter with these errors:\n"
         f"{(lint_output or '').strip()[:2000]}\n\n"
-        f"CONTENIDO DEL INTENTO:\n```\n{attempted}\n```\n\n"
-        "Devuelve el archivo COMPLETO corregido (sin esos errores de linter y sin violar "
-        "el Handbook) en un solo bloque de código."
+        f"ATTEMPT CONTENT:\n```\n{attempted}\n```\n\n"
+        "Return the COMPLETE corrected file (without those linter errors and without violating "
+        "the Handbook) in a single code block."
     )
     return _FIX_RETRY_SYSTEM, user
 
@@ -449,7 +459,7 @@ def select_fixable(findings: list[dict], changed_files: set[str]) -> dict[str, l
 def validate_content(path: str, content: str | None) -> tuple[bool, str]:
     """Deterministic post-fix validation: the corrected file must still parse."""
     if not content or not content.strip():
-        return False, "contenido vacío"
+        return False, "empty content"
     if path.endswith(".py"):
         try:
             compile(content, path, "exec")
@@ -463,7 +473,7 @@ def validate_content(path: str, content: str | None) -> tuple[bool, str]:
         except ImportError:
             pass  # no yaml on the runner — skip (non-empty already checked)
         except Exception as e:  # noqa: BLE001 — any parse error = invalid YAML
-            return False, f"YAML inválido: {e}"
+            return False, f"Invalid YAML: {e}"
     return True, ""
 
 

@@ -279,3 +279,88 @@ class TestCompareMetrics:
         result = promotion_core.compare_metrics(challenger_mae=0.0, champion_mae=0.0)
         assert result["better"] is True
         assert result["pct_change"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# parse_handbook_rules — handbook markdown → compact prompt lines
+# ---------------------------------------------------------------------------
+
+_SAMPLE_HANDBOOK = """
+# ML Model Lifecycle
+
+### [ML-01] A hyperparameter change requires updating the metric-regression test
+- **Severity:** BLOCKER
+- **Citation:** ModelOps Handbook › ML Model Lifecycle › ML-01
+
+Any change to model hyperparameters must be accompanied by an updated regression test.
+❌ A PR that edits n_estimators but leaves max_acceptable_mae untouched.
+✅ The same change WITH an updated threshold.
+
+### [ML-03] Promotion requires challenger to be no worse than champion
+- **Severity:** BLOCKER
+- **Citation:** ModelOps Handbook › ML Model Lifecycle › ML-03
+
+A challenger is promoted only if its MAE is at most the champion's MAE.
+"""
+
+_SAMPLE_SUGGESTION = """
+### [ML-05] Every training run is tracked in MLflow
+- **Severity:** SUGGESTION
+- **Citation:** ModelOps Handbook › ML Model Lifecycle › ML-05
+
+Every training run logs to MLflow with MLflow >= 3.
+"""
+
+
+class TestParseHandbookRules:
+    def test_extracts_two_rules_from_sample(self):
+        result = promotion_core.parse_handbook_rules(_SAMPLE_HANDBOOK)
+        assert "ML-01" in result
+        assert "ML-03" in result
+
+    def test_severity_preserved(self):
+        result = promotion_core.parse_handbook_rules(_SAMPLE_HANDBOOK)
+        assert "[BLOCKER]" in result
+
+    def test_citation_preserved(self):
+        result = promotion_core.parse_handbook_rules(_SAMPLE_HANDBOOK)
+        assert "ModelOps Handbook" in result
+
+    def test_example_lines_stripped(self):
+        result = promotion_core.parse_handbook_rules(_SAMPLE_HANDBOOK)
+        # ❌/✅ marker lines must not appear in the compact output
+        assert "❌" not in result
+        assert "✅" not in result
+
+    def test_suggestion_severity(self):
+        result = promotion_core.parse_handbook_rules(_SAMPLE_SUGGESTION)
+        assert "ML-05" in result
+        assert "[SUGGESTION]" in result
+
+    def test_empty_text_falls_back_to_defaults(self):
+        result = promotion_core.parse_handbook_rules("")
+        assert result == promotion_core.DEFAULT_ML_RULES
+
+    def test_no_headings_falls_back_to_defaults(self):
+        result = promotion_core.parse_handbook_rules("# Just a heading\nNo rules here.")
+        assert result == promotion_core.DEFAULT_ML_RULES
+
+    def test_real_handbook_file_parses_five_rules(self):
+        """Verify the actual modelops_handbook/ml-model-lifecycle.md file parses cleanly."""
+        import pathlib
+
+        handbook_path = (
+            pathlib.Path(__file__).resolve().parents[1]
+            / "modelops_handbook"
+            / "ml-model-lifecycle.md"
+        )
+        if not handbook_path.exists():
+            return  # handbook not yet written — skip, don't fail
+        text = handbook_path.read_text()
+        result = promotion_core.parse_handbook_rules(text)
+        # All five handbook rules must be present
+        for rule_id in ("ML-01", "ML-02", "ML-03", "ML-04", "ML-05"):
+            assert rule_id in result, f"Expected {rule_id} in parsed handbook rules"
+        # Compact format: one line per rule, no raw markdown
+        assert "###" not in result
+        assert "❌" not in result
