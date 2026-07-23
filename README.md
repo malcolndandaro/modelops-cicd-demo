@@ -14,6 +14,7 @@ gates** protect every model promotion — one at PR time, one before merge.
 
 ## Table of contents
 
+- [Architecture diagram](#architecture-diagram)
 - [The two gates](#the-two-gates)
 - [The pipeline](#the-pipeline)
 - [Demo scenarios](#demo-scenarios)
@@ -21,6 +22,16 @@ gates** protect every model promotion — one at PR time, one before merge.
 - [Repo structure](#repo-structure)
 - [How to run](#how-to-run)
 - [Conventions & notes](#conventions--notes)
+
+## Architecture diagram
+
+Editable source: [`docs/architecture.drawio`](docs/architecture.drawio) (open with
+[diagrams.net](https://app.diagrams.net)). To refresh the rendered image, export the
+diagram as `docs/architecture.png` (File → Export as → PNG) — GitHub renders the PNG but
+not the raw `.drawio`.
+
+<!-- Once exported, uncomment: -->
+<!-- ![ModelOps CI/CD architecture](docs/architecture.png) -->
 
 ## The two gates
 

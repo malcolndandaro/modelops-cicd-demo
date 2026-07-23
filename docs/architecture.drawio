@@ -1,0 +1,218 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Página-1" id="w456wUFsNAHOhLmqLile">
+    <mxGraphModel dx="2054" dy="1121" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="960" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="layer1" parent="0" value="1 · Fluxo de promoção (sem agentes)" />
+        <mxCell id="pr" parent="layer1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="👤 Desenvolvedor&#xa;abre Pull Request" vertex="1">
+          <mxGeometry height="56" width="150" x="40" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="checks" parent="layer1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="✅ Checks determinísticos&#xa;Ruff · sqlfluff · bundle validate" vertex="1">
+          <mxGeometry height="56" width="200" x="250" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="review" parent="layer1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="👥 Revisão humana&#xa;+ aprovação" vertex="1">
+          <mxGeometry height="56" width="150" x="510" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="merge" parent="layer1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="🔀 Merge na main" vertex="1">
+          <mxGeometry height="56" width="130" x="720" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="deploy_note" parent="layer1" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#6c8ebf;" value="↓ pós-merge: deploy por ambiente&#xa;(ver camada 4)" vertex="1">
+          <mxGeometry height="56" width="220" x="900" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pr_checks" edge="1" parent="layer1" source="pr" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="checks">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_checks_review" edge="1" parent="layer1" source="checks" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="review">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_review_merge" edge="1" parent="layer1" source="review" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="merge">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="layer2" parent="0" value="2 · + Reviewer (Gate 1)" />
+        <mxCell id="g1_reviewer" parent="layer2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="🤖 ModelOps Reviewer — Gate 1&#xa;ResponsesAgent · GLM-5-2&#xa;lê o diff do PR" vertex="1">
+          <mxGeometry height="76" width="200" x="250" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="g1_ka" parent="layer2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="📚 ModelOps Handbook&#xa;Knowledge Assistant (grounding)" vertex="1">
+          <mxGeometry height="60" width="200" x="250" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="g1_checkrun" parent="layer2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="🔎 GitHub Check Run&#xa;findings citados + severidade" vertex="1">
+          <mxGeometry height="76" width="200" x="510" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="g1_note" parent="layer2" style="shape=note;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;size=14;" value="Só BLOCKER bloqueia o merge&#xa;(padrão: nunca bloqueia)" vertex="1">
+          <mxGeometry height="64" width="150" x="720" y="276" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pr_rev" edge="1" parent="layer2" source="pr" style="endArrow=block;strokeWidth=2;strokeColor=#82b366;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g1_reviewer" value="diff do PR">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="115" y="308" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ka_rev" edge="1" parent="layer2" source="g1_ka" style="endArrow=block;strokeWidth=2;strokeColor=#82b366;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g1_reviewer" value="regras">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rev_cr" edge="1" parent="layer2" source="g1_reviewer" style="endArrow=block;strokeWidth=2;strokeColor=#82b366;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g1_checkrun">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_cr_review" edge="1" parent="layer2" source="g1_checkrun" style="endArrow=block;strokeWidth=2;strokeColor=#b85450;dashed=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="review" value="BLOCKER ⇒ bloqueia">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="231" />
+              <mxPoint x="585" y="231" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="layer3" parent="0" value="3 · + /modelops-fix" />
+        <mxCell id="fix_bot" parent="layer3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="🔧 /modelops-fix — bot GitHub App&#xa;reescreve o trecho e abre&#xa;PR de correção no branch do PR" vertex="1">
+          <mxGeometry height="76" width="250" x="250" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cr_fix" edge="1" parent="layer3" source="g1_checkrun" style="endArrow=block;strokeWidth=2;strokeColor=#d79b00;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="fix_bot" value="/modelops-fix">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="518" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_fix_pr" edge="1" parent="layer3" source="fix_bot" style="endArrow=block;strokeWidth=2;strokeColor=#d79b00;dashed=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="pr" value="PR de correção re-dispara o review">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="115" y="518" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="layer4" parent="0" style="locked=0;" value="4 · Gates de deploy" />
+        <mxCell id="g2_pre" parent="layer4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" value="🧪 Gate 2 (PRÉ-MERGE) — check obrigatório&#xa;1) deploy dev EFÊMERO  (dev_suffix=-pr&lt;N&gt;)&#xa;2) testes de integração serverless&#xa;3) train → register @challenger → gate → promote&#xa;4) destroy do deploy efêmero" vertex="1">
+          <mxGeometry height="120" width="320" x="250" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="e_checks_g2" edge="1" parent="layer4" source="checks" style="endArrow=block;strokeWidth=2;strokeColor=#9673a6;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g2_pre" value="integração">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="234" y="178" />
+              <mxPoint x="234" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_g2_review" edge="1" parent="layer4" source="g2_pre" style="endArrow=block;strokeWidth=2;strokeColor=#b85450;dashed=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="review" value="BLOCK ⇒ bloqueia">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="586" y="640" />
+              <mxPoint x="586" y="413" />
+              <mxPoint x="494" y="413" />
+              <mxPoint x="494" y="178" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="d_dev" parent="layer4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="deploy-dev&#xa;(dev COMPARTILHADO)" vertex="1">
+          <mxGeometry height="64" width="180" x="60" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="gate_qa" parent="layer4" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="🔒 Gate QA&#xa;aprovação obrigatória" vertex="1">
+          <mxGeometry height="56" width="140" x="300" y="784" as="geometry" />
+        </mxCell>
+        <mxCell id="d_qa" parent="layer4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="deploy-qa&#xa;+ train &amp; Gate 2&#xa;(schema staging)" vertex="1">
+          <mxGeometry height="64" width="180" x="500" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="gate_prod" parent="layer4" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="🔒 Gate PROD&#xa;aprovação obrigatória" vertex="1">
+          <mxGeometry height="56" width="140" x="740" y="784" as="geometry" />
+        </mxCell>
+        <mxCell id="d_prod" parent="layer4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="deploy-prod&#xa;+ train &amp; Gate 2&#xa;(schema prod)" vertex="1">
+          <mxGeometry height="64" width="180" x="940" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="g2_detail" parent="layer4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" value="🧪 Gate 2 — Promotion Gate&#xa;LLM: challenger × champion&#xa;+ diff de config vs regras ML&#xa;APPROVE → move @champion&#xa;BLOCK → falha o job" vertex="1">
+          <mxGeometry height="90" width="240" x="1160" y="772" as="geometry" />
+        </mxCell>
+        <mxCell id="e_merge_ddev" edge="1" parent="layer4" source="merge" style="endArrow=block;strokeWidth=2;strokeColor=#666666;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d_dev" value="pós-merge (deploy.yml)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="785" y="245" />
+              <mxPoint x="150" y="245" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ddev_gqa" edge="1" parent="layer4" source="d_dev" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="gate_qa">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gqa_dqa" edge="1" parent="layer4" source="gate_qa" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d_qa">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dqa_gprod" edge="1" parent="layer4" source="d_qa" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="gate_prod">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gprod_dprod" edge="1" parent="layer4" source="gate_prod" style="endArrow=block;strokeWidth=2;strokeColor=#6c8ebf;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d_prod">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dprod_g2detail" edge="1" parent="layer4" source="d_prod" style="endArrow=block;strokeWidth=2;strokeColor=#9673a6;dashed=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g2_detail" value="cada env valida&#xa;no próprio schema">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1140" y="812" />
+              <mxPoint x="1140" y="817" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="layer5" parent="0" value="5 · Completo" />
+        <mxCell id="title" parent="layer5" style="text;html=1;fontStyle=1;fontSize=20;align=left;verticalAlign=middle;" value="Pipeline ModelOps CI/CD — dois portões de IA no fluxo de promoção" vertex="1">
+          <mxGeometry height="40" width="1080" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="frame_pre" parent="layer5" style="rounded=1;fillColor=none;strokeColor=#6c8ebf;dashed=1;html=1;verticalAlign=top;align=left;fontStyle=1;fontColor=#6c8ebf;spacingLeft=8;spacingTop=6;fontSize=13;" value="PRÉ-MERGE — Pull Request (tudo aqui bloqueia o merge)" vertex="1">
+          <mxGeometry height="620" width="880" x="20" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="frame_post" parent="layer5" style="rounded=1;fillColor=none;strokeColor=#666666;dashed=1;html=1;verticalAlign=top;align=left;fontStyle=1;fontColor=#666666;spacingLeft=8;spacingTop=6;fontSize=13;" value="PÓS-MERGE — deploy.yml (cada ambiente treina e valida o próprio modelo no próprio schema)" vertex="1">
+          <mxGeometry height="150" width="1390" x="20" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_box" parent="layer5" style="rounded=1;fillColor=#f5f5f5;strokeColor=#666666;html=1;verticalAlign=top;align=left;fontStyle=1;spacingLeft=8;spacingTop=6;fontSize=13;" value="Legenda" vertex="1">
+          <mxGeometry height="250" width="280" x="1160" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_sq1" parent="layer5" style="rounded=0;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1">
+          <mxGeometry height="16" width="22" x="1176" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_l1" parent="layer5" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" value="Fluxo base / deploy" vertex="1">
+          <mxGeometry height="16" width="220" x="1206" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_sq2" parent="layer5" style="rounded=0;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1">
+          <mxGeometry height="16" width="22" x="1176" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_l2" parent="layer5" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" value="Gate 1 — Reviewer (IA)" vertex="1">
+          <mxGeometry height="16" width="220" x="1206" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_sq3" parent="layer5" style="rounded=0;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1">
+          <mxGeometry height="16" width="22" x="1176" y="234" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_l3" parent="layer5" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" value="/modelops-fix (bot)" vertex="1">
+          <mxGeometry height="16" width="220" x="1206" y="234" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_sq4" parent="layer5" style="rounded=0;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1">
+          <mxGeometry height="16" width="22" x="1176" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_l4" parent="layer5" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" value="Gate de aprovação (QA/PROD)" vertex="1">
+          <mxGeometry height="16" width="220" x="1206" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_sq5" parent="layer5" style="rounded=0;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1">
+          <mxGeometry height="16" width="22" x="1176" y="306" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_l5" parent="layer5" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;" value="Gate 2 — Promotion (IA)" vertex="1">
+          <mxGeometry height="16" width="220" x="1206" y="306" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_dash" parent="layer5" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#b85450;" value="- - -  seta tracejada vermelha = a IA segura o merge" vertex="1">
+          <mxGeometry height="16" width="260" x="1176" y="336" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
