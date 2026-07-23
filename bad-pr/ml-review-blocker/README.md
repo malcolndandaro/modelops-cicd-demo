@@ -1,53 +1,46 @@
-# bad-pr/ml-review-blocker — Scenario 1: Gate 1 blocks
+# bad-pr/ml-review-blocker — Scenario 1: Gate 1 (the reviewer) blocks
 
 ## What this PR changes
 
-This scenario simulates a developer changing a hyperparameter (`n_estimators: 100 → 200`)
-in `src/ml/config.yml` WITHOUT updating the regression test threshold (`max_acceptable_mae`
-in the same file and/or `tests/test_demand_forecaster.py`). It also adds a cross-environment
-reference in `src/jobs/pricing_adjustments.py`: a dev-context job reads the **prod schema**
-`agentic2_mlops_prod.gold_pricing` directly, hardcoded.
+A pull request that is **syntactically clean and touches no model config** — it only adds a
+pricing-reference lookup to `src/jobs/pricing_adjustments.py` that hardcodes the **prod**
+schema `malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing` from a **dev**-context
+job. A pure cross-environment (ENV-01) policy violation.
+
+> Scenario 1 deliberately does **NOT** change `src/ml/config.yml` — no hyperparameter/model
+> change — so the AI Promotion Gate (Gate 2) has nothing to flag and stays green. The
+> **reviewer (Gate 1) is the sole blocker.** The model-quality path (ML-03) is scenario 2,
+> `ml-gate-blocker`.
 
 ## Files in this scenario
 
 | File | Maps to (repo path) | What it changes |
 |---|---|---|
-| `config.yml` | `src/ml/config.yml` | `n_estimators` changed to 200; `max_acceptable_mae` NOT updated |
 | `pricing_adjustments.py` | `src/jobs/pricing_adjustments.py` | Adds `PROD_PRICING_REF = "...agentic2_mlops_prod.gold_pricing"` (hardcoded prod ref) |
 
 ## Which gate catches it
 
-**Gate 1 — PR Reviewer** BLOCKS with two findings:
+| Check | Result |
+|---|---|
+| Ruff / sqlfluff / `bundle validate` | ✅ pass (syntactically clean) |
+| `deploy + integration tests + Gate 2 (dev)` | ✅ pass (no model change → gate APPROVEs) |
+| **ModelOps Reviewer** (Gate 1 Check Run) | 🔴 **failure — ENV-01 BLOCKER** |
 
-| Finding | Rule | Severity |
-|---|---|---|
-| `n_estimators` changed without updating `max_acceptable_mae` in config.yml and `tests/test_demand_forecaster.py` | **ML-01** (hyperparameter change requires regression test update in same PR) | BLOCKER |
-| `PROD_PRICING_REF` references `agentic2_mlops_prod` from a dev-context job | **ENV-01** (cross-environment catalog/schema reference forbidden) | BLOCKER |
+**Finding:** ENV-01 (`Catalog-per-Env`) — a dev job must never read from a prod
+catalog/schema. Suggestion: use `${var.catalog}.${var.schema}.gold_pricing`.
 
 ## Narrative beat
 
-> "The linters pass green — Ruff, sqlfluff, `bundle validate` all succeed. The PR looks
-> clean syntactically. Only Gate 1, grounded on the ModelOps Handbook via the Knowledge
-> Assistant, catches the two policy violations. This is the semantic gap deterministic
-> tools cannot fill."
+> "The linters pass green — Ruff, sqlfluff, `bundle validate` — and even the AI Promotion
+> Gate is green because no model config changed. The PR looks clean. Only Gate 1, grounded
+> on the ModelOps Handbook via the Knowledge Assistant, catches the semantic ENV-01
+> violation that deterministic tools cannot see."
 
-After Gate 1 blocks, the presenter runs `/modelops-fix` to show the self-correcting loop:
-the bot opens a new fix PR that corrects both issues, which re-triggers Gate 1 to pass.
+After Gate 1 blocks, the presenter comments `/modelops-fix`: the bot (GitHub App) opens a fix
+PR against this PR's branch rewriting the hardcoded prod reference to the DABs-variable form,
+which re-triggers Gate 1 to pass.
 
 ## How to apply this scenario (for demo setup)
 
-The `scripts/reset_demo.sh --open-prs` script applies these patches to a `demo/ml-review-blocker`
-branch and opens the PR automatically. To apply manually:
-
-```bash
-git checkout -b demo/ml-review-blocker main
-cp bad-pr/ml-review-blocker/config.yml src/ml/config.yml
-cp bad-pr/ml-review-blocker/pricing_adjustments.py src/jobs/pricing_adjustments.py
-git add src/ml/config.yml src/jobs/pricing_adjustments.py
-git commit -m "demo: increase n_estimators and add pricing reference (review-blocker scenario)"
-git push origin demo/ml-review-blocker
-gh pr create --base main --head demo/ml-review-blocker \
-  --title "feat: tune demand_forecaster and add pricing reference" \
-  --body "Increases n_estimators to 200 for better accuracy. Also adds pricing reference lookup." \
-  --label demo
-```
+`scripts/reset_demo.sh --open-prs` recreates the `demo/ml-review-blocker` branch (only
+`pricing_adjustments.py` changes) and opens the PR automatically.

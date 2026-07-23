@@ -109,31 +109,20 @@ if [ "$OPEN_PRS" = "--open-prs" ]; then
     gh api --method PATCH "repos/${REPO}/git/refs/heads/${BRANCH_1}" \
         --field "sha=${MAIN_SHA}" --field "force=true" 2>/dev/null || true
 
-    # Get current tree SHA and blob contents for the changed files
-    # Push config.yml change via GitHub Contents API
-    CONFIG_CONTENT=$(base64 < "${REPO_ROOT}/bad-pr/ml-review-blocker/config.yml")
+    # Scenario 1 is a PURE code-policy (ENV-01) violation: only pricing_adjustments.py
+    # changes. We deliberately do NOT touch config.yml here — no model change means Gate 2
+    # (the promotion gate) has nothing to flag, so the reviewer (Gate 1) is the SOLE blocker,
+    # catching the semantic ENV-01 cross-env reference that the deterministic linters can't.
     PRICING_CONTENT=$(base64 < "${REPO_ROOT}/bad-pr/ml-review-blocker/pricing_adjustments.py")
-
-    # Get current file SHAs for update
-    CONFIG_SHA=$(gh api "repos/${REPO}/contents/src/ml/config.yml?ref=${BRANCH_1}" --jq '.sha' 2>/dev/null || echo "")
     PRICING_SHA=$(gh api "repos/${REPO}/contents/src/jobs/pricing_adjustments.py?ref=${BRANCH_1}" --jq '.sha' 2>/dev/null || echo "")
-
-    if [ -n "$CONFIG_SHA" ]; then
-        gh api --method PUT "repos/${REPO}/contents/src/ml/config.yml" \
-            --field "message=demo: increase n_estimators without updating regression test (ML-01 + ENV-01 scenario)" \
-            --field "content=${CONFIG_CONTENT}" \
-            --field "sha=${CONFIG_SHA}" \
-            --field "branch=${BRANCH_1}" > /dev/null
-        ok "  Updated src/ml/config.yml on $BRANCH_1"
-    fi
 
     if [ -n "$PRICING_SHA" ]; then
         gh api --method PUT "repos/${REPO}/contents/src/jobs/pricing_adjustments.py" \
-            --field "message=demo: add prod schema reference in dev job (ENV-01 violation)" \
+            --field "message=feat: add regional pricing reference to the adjustments job" \
             --field "content=${PRICING_CONTENT}" \
             --field "sha=${PRICING_SHA}" \
             --field "branch=${BRANCH_1}" > /dev/null
-        ok "  Updated src/jobs/pricing_adjustments.py on $BRANCH_1"
+        ok "  Updated src/jobs/pricing_adjustments.py on $BRANCH_1 (ENV-01 violation)"
     fi
 
     # Open PR
@@ -141,15 +130,17 @@ if [ "$OPEN_PRS" = "--open-prs" ]; then
         --repo "$REPO" \
         --base main \
         --head "$BRANCH_1" \
-        --title "feat: tune demand_forecaster — increase n_estimators and add pricing reference" \
+        --title "feat: add regional pricing reference to the adjustments job" \
         --body "$(cat <<'PREOF'
 ## Summary
 
-Increases `n_estimators` from 100 to 200 for better model accuracy. Also adds a pricing
-reference lookup for the regional adjustment logic.
+Adds a corporate pricing reference lookup to the price-adjustments job so regional
+adjustments can use the gold pricing table.
 
-**Expected demo outcome:** Gate 1 blocks — ML-01 (hyperparameter change without updating
-regression test) and ENV-01 (cross-env reference to agentic2_mlops_prod schema).
+**Expected demo outcome:** Ruff / sqlfluff / bundle-validate and the AI Promotion Gate all
+pass — the change is syntactically clean and touches no model config. Only the **ModelOps
+Reviewer** (Gate 1) blocks it, citing **ENV-01**: a dev-context job reads the prod schema
+`agentic2_mlops_prod`. `/modelops-fix` rewrites it to `${var.catalog}.${var.schema}`.
 PREOF
 )" \
         --label demo 2>&1) || PR1_URL="$(gh pr list --repo "$REPO" --head "$BRANCH_1" --state open --json url --jq '.[0].url' 2>/dev/null)"
