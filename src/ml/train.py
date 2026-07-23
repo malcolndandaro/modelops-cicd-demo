@@ -142,6 +142,7 @@ def make_dataset(features: list[str], random_state: int = 42) -> tuple[np.ndarra
 # Training entry point
 # ---------------------------------------------------------------------------
 
+
 def train(config: dict[str, Any]) -> str:
     """Train the demand forecaster, log to MLflow, return the run ID."""
     hp = config["hyperparameters"]

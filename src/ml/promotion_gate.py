@@ -115,6 +115,7 @@ def _ensure_experiment_parent(experiment_name: str) -> None:
 # Metric retrieval helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_version_metrics(client: MlflowClient, alias: str) -> dict | None:
     """Fetch MLflow metrics for the model version with the given alias.
 
@@ -181,6 +182,7 @@ def _get_config_diff(
 # LLM call
 # ---------------------------------------------------------------------------
 
+
 def _call_llm(system: str, user: str, max_attempts: int = 3) -> str:
     """Call databricks-glm-5-2 with the promotion prompt, retrying empty responses.
 
@@ -213,6 +215,7 @@ def _call_llm(system: str, user: str, max_attempts: int = 3) -> str:
 # ---------------------------------------------------------------------------
 # Gate entry point — instrumented with MLflow 3 tracing
 # ---------------------------------------------------------------------------
+
 
 def run_gate() -> None:
     """Run the promotion gate.  Exits 0 on APPROVE, 1 on BLOCK."""
@@ -278,14 +281,10 @@ def run_gate() -> None:
 
             system_prompt, user_prompt = promotion_core.build_promotion_prompt(
                 challenger_metrics={
-                    k: v
-                    for k, v in challenger_metrics.items()
-                    if k not in ("version", "run_id")
+                    k: v for k, v in challenger_metrics.items() if k not in ("version", "run_id")
                 },
                 champion_metrics={
-                    k: v
-                    for k, v in champion_metrics.items()
-                    if k not in ("version", "run_id")
+                    k: v for k, v in champion_metrics.items() if k not in ("version", "run_id")
                 },
                 config_diff=config_diff,
                 ml_rules=ml_rules,
@@ -352,9 +351,7 @@ def run_gate() -> None:
     # BLOCK → raise so the task fails and 'promote' is skipped. On the serverless
     # notebook wrapper, sys.exit(0) would ALSO raise SystemExit and be reported as a
     # failure — so APPROVE must return, and BLOCK must raise a real exception.
-    raise RuntimeError(
-        f"Promotion gate BLOCKED — promotion denied. Justification: {justification}"
-    )
+    raise RuntimeError(f"Promotion gate BLOCKED — promotion denied. Justification: {justification}")
 
 
 def main() -> None:

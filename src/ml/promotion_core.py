@@ -100,13 +100,9 @@ def build_promotion_prompt(
     if not champion_metrics:
         champion_block = "(no current champion — this is the first deployment)"
     else:
-        champion_block = "\n".join(
-            f"  {k}: {v}" for k, v in sorted(champion_metrics.items())
-        )
+        champion_block = "\n".join(f"  {k}: {v}" for k, v in sorted(champion_metrics.items()))
 
-    challenger_block = "\n".join(
-        f"  {k}: {v}" for k, v in sorted(challenger_metrics.items())
-    )
+    challenger_block = "\n".join(f"  {k}: {v}" for k, v in sorted(challenger_metrics.items()))
 
     user = (
         "ML HANDBOOK RULES (cite ONLY these rule IDs):\n"
@@ -245,6 +241,7 @@ def parse_decision(raw: object) -> dict:
 # Core 3: bootstrap decision
 # ---------------------------------------------------------------------------
 
+
 def bootstrap_decision(champion_exists: bool) -> dict | None:
     """Return an auto-APPROVE decision when no champion exists, else None.
 
@@ -312,9 +309,7 @@ def parse_handbook_rules(text: str) -> str:
         # Use title as body if body is empty after filtering
         body = body.strip() or (cur_title or "")
         citation = cur_citation.strip() or f"ModelOps Handbook › ML Model Lifecycle › {cur_id}"
-        rules.append(
-            f"- {cur_id} [{cur_severity}] (Citation: {citation}): {body[:400]}"
-        )
+        rules.append(f"- {cur_id} [{cur_severity}] (Citation: {citation}): {body[:400]}")
 
     for line in lines:
         m_heading = _RULE_HEADING.match(line)
@@ -353,6 +348,7 @@ def parse_handbook_rules(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Core 5: metric comparison
 # ---------------------------------------------------------------------------
+
 
 def compare_metrics(challenger_mae: float, champion_mae: float) -> dict:
     """Compare challenger vs champion MAE. Lower MAE is better.

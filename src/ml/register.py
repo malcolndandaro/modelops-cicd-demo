@@ -34,9 +34,7 @@ SCHEMA = os.environ.get("MLFLOW_SCHEMA", "agentic2_mlops_dev")
 MODEL_NAME = "demand_forecaster"
 REGISTERED_MODEL_FQN = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
-EXPERIMENT_NAME = os.environ.get(
-    "MLFLOW_EXPERIMENT_NAME", "/ModelOps/demand_forecaster_training"
-)
+EXPERIMENT_NAME = os.environ.get("MLFLOW_EXPERIMENT_NAME", "/ModelOps/demand_forecaster_training")
 
 
 def get_latest_run_id() -> str:
@@ -56,8 +54,7 @@ def get_latest_run_id() -> str:
     )
     if not runs:
         raise RuntimeError(
-            "No completed demand_forecaster training run found. "
-            "Run train.py first."
+            "No completed demand_forecaster training run found. " "Run train.py first."
         )
     return runs[0].info.run_id
 
