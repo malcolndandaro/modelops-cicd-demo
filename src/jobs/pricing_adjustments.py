@@ -3,10 +3,16 @@
 
 Part of the retail pipeline — applies a price adjustment to sales using
 the corporate pricing reference for the given region.
+
+The gold_pricing table is referenced via DABs-injected variables so the same
+code runs in all environments without editing.
 """
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+
+# Catalog/schema are injected by DABs so the same code runs in dev, staging, and prod.
+PRICING_REF = "${var.catalog}.${var.schema}.gold_pricing"
 
 
 def apply_price_adjustments(region: str, pricing_reference: DataFrame, adjustments=None):
