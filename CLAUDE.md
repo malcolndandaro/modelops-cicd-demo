@@ -139,9 +139,8 @@ against that env, not a re-used artifact. First run per env bootstrap-approves (
 | `tests/test_demand_forecaster.py` | **Metric-regression gate** — asserts model MAE ≤ `max_acceptable_mae` in config.yml. Demo prop: bad-PR #1 "forgets" to update it (ML-01 BLOCKER). |
 | `tests/conftest.py` | Serverless integration test fixtures. |
 | `tests/test_pipeline_serverless.py` | Serverless integration tests for the retail pipeline. |
-| `bad-pr/ml-review-blocker/` | Bad PR scenario 1: caught by Gate 1 (ML-01, ENV-01). |
+| `bad-pr/ml-review-blocker/` | Bad PR scenario 1: caught by Gate 1 (ENV-01 — pure cross-env ref; touches no model config, so Gate 2 has nothing to flag). |
 | `bad-pr/ml-gate-blocker/` | Bad PR scenario 2: passes Gate 1, blocked by Gate 2 (ML-03). |
-| `bad-pr/` | Legacy linter anti-examples (bad_python.py, bad_sql.sql, broken_bundle). |
 | `resources/jobs/` | DABs job YAML definitions. |
 | `sql/` | SQL assets. |
 | `scripts/reset_demo.sh` | Idempotent demo reset: PRs/branches, UC model across all 3 schemas (dev keeps v1, qa/prod wiped), model ownership → CI SP, experiment grants, seed tables, endpoint cleanup. |
