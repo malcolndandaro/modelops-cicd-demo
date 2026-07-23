@@ -1,13 +1,14 @@
 name: deploy
 
 # Post-merge pipeline: on push to main → deploy dev → [manual gate: qa] → deploy qa
-# → [manual gate: prod] → deploy prod.
+# + train/gate → [manual gate: prod] → deploy prod + train/gate.
 #
-# NOTE: model validation (train → register → AI promotion gate → promote in dev) happens
-# PRE-MERGE, as a required check in pr-checks.yml. If Gate 2 blocks a degraded model, the
-# merge itself is blocked and main never receives the bad change. By the time we reach this
-# post-merge pipeline the model is already validated + promoted in dev, so here we only
-# deploy the proven change onward to qa/prod behind the human approval gates.
+# Model lifecycle: the change is FIRST validated PRE-MERGE (train → register → AI promotion
+# gate → promote in dev, as a required check in pr-checks.yml) — if Gate 2 blocks a degraded
+# model, the merge itself is blocked and main never receives the bad change. Post-merge, each
+# ENVIRONMENT then trains + validates + promotes its OWN model in its OWN schema behind the
+# same gate: qa trains in agentic2_mlops_staging, prod in agentic2_mlops_prod. So every env
+# has a model that was gated against that env's data, not a re-used dev artifact.
 # The qa/prod gates are GitHub Environments with required reviewers — each promotion
 # pauses for a human approval (hand the customer the button). "prod" is a sandbox schema
 # (agentic2_mlops_prod), so the live promotion is safe to run in the demo.
@@ -64,6 +65,11 @@ jobs:
       - uses: databricks/setup-cli@main
       - name: Deploy bundle to qa
         run: databricks bundle deploy -t qa
+      - name: Train + Gate 2 in qa (each env trains + validates its own model)
+        # Each environment trains and validates its OWN model against its OWN schema, behind
+        # the same AI Promotion Gate. On the first run qa has no @champion, so the gate
+        # bootstrap-approves and establishes qa's champion; later runs compare + gate.
+        run: databricks bundle run model_training_job -t qa
 
   deploy-prod:
     name: Promote to prod (manual approval)
@@ -81,3 +87,7 @@ jobs:
       - uses: databricks/setup-cli@main
       - name: Deploy bundle to prod (sandbox schema agentic2_mlops_prod)
         run: databricks bundle deploy -t prd
+      - name: Train + Gate 2 in prod (each env trains + validates its own model)
+        # Same pattern as qa: prod trains + gates + promotes its own model in the prod
+        # schema. First run bootstrap-approves and establishes prod's @champion.
+        run: databricks bundle run model_training_job -t prd

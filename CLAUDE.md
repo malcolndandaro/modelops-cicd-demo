@@ -100,13 +100,18 @@ PR (pre-merge, all gate the merge):
                → AI promotion gate → promote;  BLOCK ⇒ check red ⇒ merge blocked)
    modelops-review:  Gate 1 (reviewer) Check Run  →  /modelops-fix (bot opens fix PR)
    → human approval + merge to main
-Post-merge (deploy.yml, deploy-only — model already validated pre-merge):
-   deploy-dev  → [gate qa]  → deploy-qa  → [gate prod]  → deploy-prod
+Post-merge (deploy.yml): each env deploys THEN trains + gates its OWN model in its OWN schema:
+   deploy-dev  → [gate qa]  → deploy-qa + train/Gate2 (staging schema)
+                            → [gate prod]  → deploy-prod + train/Gate2 (prod schema)
 ```
 
-**Why Gate 2 is pre-merge:** if the promotion gate ran post-merge, a degraded model's
-config would already be on `main` before the gate rejected it (broken main + red deploy).
-Running it as a required pre-merge check means a BLOCK stops the merge — `main` stays clean.
+**Why Gate 2 is pre-merge (as a required check):** if the promotion gate ran only
+post-merge, a degraded model's config would already be on `main` before the gate rejected
+it (broken main + red deploy). Making it a required pre-merge check means a BLOCK stops the
+merge — `main` stays clean. **Post-merge, each environment trains + validates + promotes its
+own model** in its own schema behind the same gate (dev pre-merge, then qa in
+`agentic2_mlops_staging`, prod in `agentic2_mlops_prod`) — so every env's champion was gated
+against that env, not a re-used artifact. First run per env bootstrap-approves (no champion yet).
 
 ## Repo map
 
