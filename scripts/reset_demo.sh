@@ -26,6 +26,8 @@ REPO="malcolndandaro/modelops-cicd-demo"
 CATALOG="malcoln_aws_stable_catalog"
 SCHEMA="agentic2_mlops_dev"
 MODEL="demand_forecaster"
+CI_SP_CLIENT_ID="a66e1537-4dc5-4115-a50c-1e5d4143c688"  # sp-modelops-ci
+MLFLOW_EXPERIMENT="/ModelOps/demand_forecaster_training"
 OPEN_PRS="${1:-}"
 
 # Color helpers
@@ -202,6 +204,28 @@ PREOF
     fi
 else
     ok "Step 2/5: Skipped (run with --open-prs to also create demo PRs)"
+fi
+
+# ---------------------------------------------------------------------------
+# 2.5 Ensure the CI SP can read/write the MLflow experiment folder.
+# The training job runs AS the CI SP; if the experiment (or its /ModelOps parent) was
+# first created by a human, the SP lacks read permission and `train` fails with
+# "does not have read permission for node /workspace/<id>". Grant CAN_MANAGE (idempotent).
+# ---------------------------------------------------------------------------
+info "Step 2.5: Ensuring CI SP can access the MLflow experiment folder..."
+_exp_status=$(databricks --profile "$PROFILE" workspace get-status "$MLFLOW_EXPERIMENT" -o json 2>/dev/null || echo "")
+if [ -n "$_exp_status" ]; then
+    _dir_id=$(databricks --profile "$PROFILE" workspace get-status "$(dirname "$MLFLOW_EXPERIMENT")" -o json 2>/dev/null | python3 -c "import sys,json;print(json.load(sys.stdin).get('object_id',''))" 2>/dev/null || echo "")
+    _exp_id=$(echo "$_exp_status" | python3 -c "import sys,json;print(json.load(sys.stdin).get('object_id',''))" 2>/dev/null || echo "")
+    for pair in "directories:${_dir_id}" "experiments:${_exp_id}"; do
+        _type="${pair%%:*}"; _oid="${pair##*:}"
+        [ -z "$_oid" ] && continue
+        databricks --profile "$PROFILE" api patch "/api/2.0/permissions/${_type}/${_oid}" \
+            --json "{\"access_control_list\":[{\"service_principal_name\":\"$CI_SP_CLIENT_ID\",\"permission_level\":\"CAN_MANAGE\"}]}" >/dev/null 2>&1 \
+            && ok "  Granted CI SP CAN_MANAGE on ${_type}/${_oid}" || true
+    done
+else
+    ok "  Experiment not created yet — first training run (as the SP) will create + own it"
 fi
 
 # ---------------------------------------------------------------------------
