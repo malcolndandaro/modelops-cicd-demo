@@ -15,6 +15,7 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
 from typing import Any
 
 import mlflow
@@ -214,11 +215,16 @@ def train(config: dict[str, Any]) -> str:
 def main() -> None:
     config = load_config()
     run_id = train(config)
-    # Write run_id to a file so the register task can pick it up as a job parameter
-    # or read it from the MLflow tracking server by run name.
-    output_path = pathlib.Path("/tmp/demand_forecaster_run_id.txt")  # noqa: S108 — serverless tmp
-    output_path.write_text(run_id)
-    print(f"Run ID written to {output_path}")
+    # Best-effort: hand the run_id to the register task via a temp file. On serverless,
+    # tasks do NOT share a local filesystem and /tmp may be read-only — so this is only a
+    # convenience. register.py's authoritative path is get_latest_run_id() (looks the run
+    # up by experiment + tags.model_name), so a failed write here is harmless.
+    try:
+        output_path = pathlib.Path(tempfile.gettempdir()) / "demand_forecaster_run_id.txt"
+        output_path.write_text(run_id)
+        print(f"Run ID written to {output_path}")
+    except OSError as e:
+        print(f"(run_id file not written — register.py resolves it by experiment: {e})")
 
 
 if __name__ == "__main__":
