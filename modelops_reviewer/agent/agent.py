@@ -96,22 +96,25 @@ def _query_ka(query_text: str) -> str | None:
 
 
 def _call_llm(system: str, user: str) -> str:
-    """Call the GLM-5-2 FM endpoint using the OpenAI client over /serving-endpoints.
+    """Call the GLM-5-2 FM endpoint via an OpenAI-compatible client over /serving-endpoints.
 
-    This is the documented pattern for calling an FM from INSIDE a deployed agent: it
-    uses the Model-Serving-injected on-behalf-of token (DATABRICKS_TOKEN/HOST), which the
-    `resources=[DatabricksServingEndpoint(LLM_ENDPOINT)]` passthrough authorizes. The
-    older mlflow.deployments get_deploy_client path re-resolved through the `system`
-    catalog and 403'd ("USE CATALOG on system") for the serving identity.
+    Auth: this account has the Foundation Model UC permissions feature enabled, so the
+    agent's down-scoped on-behalf-of token does NOT carry `USE CATALOG on system` and 403s.
+    We therefore authenticate as the CI service principal (granted EXECUTE on
+    system.ai.databricks-glm-5-2), whose client id/secret are injected as env vars on the
+    served entity (MODELOPS_SP_CLIENT_ID / MODELOPS_SP_CLIENT_SECRET). When those aren't
+    present (e.g. local log_model validation), fall back to ambient auth.
     """
     from databricks.sdk import WorkspaceClient
 
-    # Use the SDK's OpenAI-compatible client: it resolves auth from the ambient context —
-    # the injected on-behalf-of token when running inside Model Serving, or the local
-    # profile (OAuth/PAT) during log_model validation. Avoids the static-api_key problem
-    # of constructing openai.OpenAI directly, and the `system` catalog 403 of the older
-    # mlflow.deployments path.
-    client = WorkspaceClient().serving_endpoints.get_open_ai_client()
+    sp_id = os.environ.get("MODELOPS_SP_CLIENT_ID")
+    sp_secret = os.environ.get("MODELOPS_SP_CLIENT_SECRET")
+    if sp_id and sp_secret:
+        host = os.environ.get("DATABRICKS_HOST") or WorkspaceClient().config.host
+        w = WorkspaceClient(host=host, client_id=sp_id, client_secret=sp_secret)
+    else:
+        w = WorkspaceClient()  # ambient auth (local validation / creator context)
+    client = w.serving_endpoints.get_open_ai_client()
     resp = client.chat.completions.create(
         model=LLM_ENDPOINT,
         messages=[
