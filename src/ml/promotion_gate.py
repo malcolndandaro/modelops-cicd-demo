@@ -29,7 +29,29 @@ from mlflow.deployments import get_deploy_client
 # Lazy import of promotion_core — supports both installed-package and
 # direct-script execution from the repo root (serverless task)
 # ---------------------------------------------------------------------------
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _repo_root() -> pathlib.Path:
+    """Resolve the repo root, robust to `__file__` being undefined.
+
+    Databricks runs a spark_python_task via exec(compile(...)), so `__file__` is not
+    defined there (NameError). Locally it is. Fall back to walking up from cwd for the
+    `databricks.yml` marker (DABs syncs the whole tree under the deploy files root).
+    """
+    try:
+        candidate = pathlib.Path(__file__).resolve().parents[2]
+        if (candidate / "databricks.yml").exists():
+            return candidate
+    except NameError:
+        pass
+    cwd = pathlib.Path.cwd().resolve()
+    for d in (cwd, *cwd.parents):
+        if (d / "databricks.yml").exists():
+            return d
+    return cwd
+
+
+_REPO_ROOT = _repo_root()
 sys.path.insert(0, str(_REPO_ROOT / "src" / "ml"))
 
 import promotion_core  # noqa: E402  (after sys.path insert)

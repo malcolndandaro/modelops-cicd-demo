@@ -29,7 +29,28 @@ from sklearn.model_selection import train_test_split
 # Config
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+def _repo_root() -> pathlib.Path:
+    """Resolve the repo root, robust to `__file__` being undefined.
+
+    Databricks runs a spark_python_task via exec(compile(...)), so `__file__` is not
+    defined there (NameError). Locally it is. Fall back to walking up from cwd for the
+    `databricks.yml` marker (DABs syncs the whole tree under the deploy files root).
+    """
+    try:
+        candidate = pathlib.Path(__file__).resolve().parents[2]
+        if (candidate / "databricks.yml").exists():
+            return candidate
+    except NameError:
+        pass
+    cwd = pathlib.Path.cwd().resolve()
+    for d in (cwd, *cwd.parents):
+        if (d / "databricks.yml").exists():
+            return d
+    return cwd
+
+
+_REPO_ROOT = _repo_root()
 _CONFIG_PATH = _REPO_ROOT / "src" / "ml" / "config.yml"
 
 
