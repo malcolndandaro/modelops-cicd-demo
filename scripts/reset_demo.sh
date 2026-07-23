@@ -89,6 +89,10 @@ if [ "$OPEN_PRS" = "--open-prs" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
+    # Ensure the 'demo' label exists — gh pr create --label fails hard if it's missing,
+    # which would silently drop the PRs. Idempotent (no-op if it already exists).
+    gh label create demo -R "$REPO" --color FF6B00 --description "Demo PRs (reset-managed)" 2>/dev/null || true
+
     # Scenario 1: ml-review-blocker
     BRANCH_1="demo/ml-review-blocker"
     info "  Creating branch $BRANCH_1..."
@@ -146,8 +150,12 @@ reference lookup for the regional adjustment logic.
 regression test) and ENV-01 (cross-env reference to agentic2_mlops_prod schema).
 PREOF
 )" \
-        --label demo 2>/dev/null || echo "already exists")
-    ok "  Opened PR: $PR1_URL"
+        --label demo 2>&1) || PR1_URL="$(gh pr list --repo "$REPO" --head "$BRANCH_1" --state open --json url --jq '.[0].url' 2>/dev/null)"
+    if [ -z "$PR1_URL" ]; then
+        echo "  WARNING: could not open PR for $BRANCH_1 — check 'gh pr create' output above"
+    else
+        ok "  PR ready: $PR1_URL"
+    fi
 
     # Scenario 2: ml-gate-blocker
     BRANCH_2="demo/ml-gate-blocker"
@@ -186,8 +194,12 @@ most predictive features. Updates `max_acceptable_mae` accordingly.
 (challenger MAE significantly worse than champion after dropping features and capacity).
 PREOF
 )" \
-        --label demo 2>/dev/null || echo "already exists")
-    ok "  Opened PR: $PR2_URL"
+        --label demo 2>&1) || PR2_URL="$(gh pr list --repo "$REPO" --head "$BRANCH_2" --state open --json url --jq '.[0].url' 2>/dev/null)"
+    if [ -z "$PR2_URL" ]; then
+        echo "  WARNING: could not open PR for $BRANCH_2 — check 'gh pr create' output above"
+    else
+        ok "  PR ready: $PR2_URL"
+    fi
 else
     ok "Step 2/5: Skipped (run with --open-prs to also create demo PRs)"
 fi
