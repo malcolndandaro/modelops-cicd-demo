@@ -19,7 +19,7 @@
 > - **Reset** — `reset_demo.sh --open-prs` is idempotent; leaves exactly 2 demo PRs and a
 >   clean model baseline: **dev** `demand_forecaster` v1 `@champion` / no `@challenger`,
 >   **staging + prod wiped** (each bootstraps fresh on the post-merge deploy). Seeds (all 3
->   schemas) + experiment grants self-healed.
+>   schemas), experiment grants, and model ownership (→ CI SP, all 3 schemas) self-healed.
 > The **"Hard-won operational insights"** section below is the single most important read —
 > ~20 real failures had to be fixed to get here, almost all invisible until the code ran as
 > the **CI service principal** on the **serverless** job / **self-hosted** runner.
@@ -144,7 +144,7 @@ against that env, not a re-used artifact. First run per env bootstrap-approves (
 | `bad-pr/` | Legacy linter anti-examples (bad_python.py, bad_sql.sql, broken_bundle). |
 | `resources/jobs/` | DABs job YAML definitions. |
 | `sql/` | SQL assets. |
-| `scripts/reset_demo.sh` | Idempotent demo reset: PRs/branches, UC model across all 3 schemas (dev keeps v1, qa/prod wiped), experiment grants, seed tables, endpoint cleanup. |
+| `scripts/reset_demo.sh` | Idempotent demo reset: PRs/branches, UC model across all 3 schemas (dev keeps v1, qa/prod wiped), model ownership → CI SP, experiment grants, seed tables, endpoint cleanup. |
 | `.github/workflows/` | `pr-checks.yml`, `modelops-review.yml`, `modelops-fix.yml`, `deploy.yml`. |
 | `databricks.yml` | DABs bundle `modelops-cicd-demo`; targets `dev`/`qa`/`prd`; var `agent_model_version`. |
 | `docs/ado-translation.md` (+ 4 `azure-pipelines-*.yml`) | GitHub Actions → Azure DevOps parity guide. |
@@ -285,10 +285,14 @@ serverless task execution differs from local Python in ways that bite silently.*
 11. **Experiment folder:** if `/ModelOps` was first created by a human, the SP can't read it
     (`does not have read permission for node /workspace/<id>`). Grant SP `CAN_MANAGE` on the
     experiment + parent dir. `reset_demo.sh` step 2.5 self-heals this.
-12. **Model versions:** the SP couldn't add versions to a human-created model
-    (`does not have CREATE MODEL VERSION`). Fix: **transfer model ownership to the SP**
-    (`api patch /api/2.1/unity-catalog/models/<FQN> --json '{"owner":"<sp-app-id>"}'`). Owner
-    can create versions AND move aliases (register + promote).
+12. **Model versions:** the SP couldn't add versions to a human-created (or human-owned)
+    model — `register` fails `PERMISSION_DENIED: ... does not have MANAGE on Routine or Model`
+    (older API: `does not have CREATE MODEL VERSION`). Fix: **transfer model ownership to the
+    SP** (`api patch /api/2.1/unity-catalog/models/<FQN> --json '{"owner":"<sp-app-id>"}'`).
+    Owner can create versions AND move aliases (register + promote). ⚠️ This drifts back per
+    schema whenever a model is (re)created by a human — bit qa/prod after the per-env split
+    (dev was SP-owned, staging/prod were human-owned → qa deploy `register` failed).
+    `reset_demo.sh` step 2.7 now self-heals ownership → CI SP for all 3 schemas.
 13. **DO NOT churn SP OAuth secrets.** They cap at 5 per SP; minting a new one + deleting old
     ones invalidated the `DATABRICKS_CLIENT_SECRET` in GitHub → `deploy.yml` failed
     `invalid_client`. Keep exactly ONE secret, shared by the GitHub secret AND the reviewer

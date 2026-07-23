@@ -241,6 +241,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 2.7 Ensure the CI SP OWNS the demand_forecaster model in every schema.
+# register/promote run AS the CI SP; in UC only the model OWNER (or MANAGE holder) can
+# create versions or move @champion/@challenger. A human-created (or human-owned) model
+# fails these tasks with "PERMISSION_DENIED: ... does not have MANAGE on Routine or Model".
+# Idempotently transfer ownership to the SP for all three schemas (best-effort; skips a
+# schema whose model doesn't exist yet — the first SP deploy bootstraps + owns it).
+# ---------------------------------------------------------------------------
+info "Step 2.7: Ensuring CI SP owns the demand_forecaster model in all schemas..."
+for _schema in agentic2_mlops_dev agentic2_mlops_staging agentic2_mlops_prod; do
+    _fqn="${CATALOG}.${_schema}.${MODEL}"
+    _owner=$(databricks --profile "$PROFILE" api get "/api/2.1/unity-catalog/models/${_fqn}" 2>/dev/null \
+        | python3 -c "import sys,json;print(json.load(sys.stdin).get('owner',''))" 2>/dev/null || echo "")
+    if [ -z "$_owner" ]; then
+        ok "  ${_schema}: model not created yet — first SP deploy will bootstrap + own it"
+    elif [ "$_owner" = "$CI_SP_CLIENT_ID" ]; then
+        ok "  ${_schema}: already owned by CI SP"
+    else
+        databricks --profile "$PROFILE" api patch "/api/2.1/unity-catalog/models/${_fqn}" \
+            --json "{\"owner\":\"$CI_SP_CLIENT_ID\"}" >/dev/null 2>&1 \
+            && ok "  ${_schema}: ownership transferred to CI SP (was ${_owner})" \
+            || echo "  WARNING: could not transfer ${_fqn} ownership (was ${_owner}) — register may fail as the SP"
+    fi
+done
+
+# ---------------------------------------------------------------------------
 # 3. UC model reset across ALL envs. Each environment now trains its OWN model
 #    (dev pre-merge; qa/prod post-merge), so the reset must clean all three schemas:
 #      - dev     → keep v1, @champion → v1, drop @challenger   (baseline for scenario 2's
