@@ -13,7 +13,7 @@ on:
         required: true
 
 permissions:
-  contents: write        # the bot pushes a fix commit (via MODELOPS_BOT_TOKEN, not this token)
+  contents: write        # the bot pushes a fix commit (via the GitHub App token, not this token)
   pull-requests: write   # open the fix PR against the original PR's head branch
   issues: write          # post the outcome comment
 
@@ -25,6 +25,18 @@ jobs:
       (github.event.issue.pull_request != null && contains(github.event.comment.body, '/modelops-fix'))
     runs-on: self-hosted
     steps:
+      # Mint a short-lived GitHub App installation token (production-correct bot identity,
+      # ADR-0003). The App (id in vars.MODELOPS_BOT_APP_ID) authenticates with its private
+      # key (secrets.MODELOPS_BOT_APP_PRIVATE_KEY); the token it returns is scoped to this
+      # repo and expires in ~1h. The bot pushes + opens the fix PR as this App identity, and
+      # because it is NOT the GITHUB_TOKEN, its push re-triggers review + checks.
+      - name: Mint GitHub App token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.MODELOPS_BOT_APP_ID }}
+          private-key: ${{ secrets.MODELOPS_BOT_APP_PRIVATE_KEY }}
+
       - name: Resolve PR number
         id: pr
         run: |
@@ -66,6 +78,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.num }}
           ACTOR: ${{ github.event.comment.user.login || github.actor }}
-          BOT_TOKEN: ${{ secrets.MODELOPS_BOT_TOKEN }}
+          # The bot identity is the GitHub App installation token (not a PAT). Its push
+          # re-triggers review + checks; it opens the fix PR as the App.
+          BOT_TOKEN: ${{ steps.app_token.outputs.token }}
+          KA_ENDPOINT: ka-5f315d3c-endpoint
           RUN_ID: ${{ github.run_id }}
         run: python3 modelops_reviewer/ci/fix_pr.py

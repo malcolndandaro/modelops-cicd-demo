@@ -6,14 +6,15 @@ Triggered by an `issue_comment` containing `/modelops-fix` (production) or by
   2. re-review the PR to get findings, grouped by file;
   3. ask the FM for the COMPLETE corrected file per finding-bearing file;
   4. validate each parses (compile/yaml) — abort the whole push if any is invalid;
-  5. the ModelOps Bot (MODELOPS_BOT_TOKEN, a fine-grained PAT) creates a new branch
-     `modelops-fix/pr-<PR>-<short-run-id>`, commits the fixes there, pushes it, then
-     opens a NEW pull request against the original PR's head branch, and comments on
-     the original PR with a link to the fix PR.
+  5. the ModelOps Bot creates a new branch `modelops-fix/pr-<PR>-<short-run-id>`,
+     commits the fixes there, pushes it, then opens a NEW pull request against the
+     original PR's head branch, and comments on the original PR with a link to the fix PR.
 Never hard-fails the job (exits 0); posts a comment with the outcome.
 
-GitHub App is the production identity (ADR-0003); slice 01 chose a fine-grained PAT
-as the demo shortcut.
+Bot identity is a GitHub App (ADR-0003): the workflow mints a short-lived installation
+token via actions/create-github-app-token (App id in vars.MODELOPS_BOT_APP_ID, key in
+secrets.MODELOPS_BOT_APP_PRIVATE_KEY) and passes it as BOT_TOKEN. Because it is not the
+GITHUB_TOKEN, the bot's push re-triggers review + checks.
 """
 
 from __future__ import annotations
