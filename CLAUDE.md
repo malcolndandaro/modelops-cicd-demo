@@ -16,8 +16,10 @@
 >   correctly rewrites the ENV-01 line to `${var.catalog}.${var.schema}.gold_pricing`.
 > - **Gate 2** — full `train → register → promotion_gate → promote` green in CI as the SP;
 >   full deploy cascade `dev → qa → prod` green (both env gates approved).
-> - **Reset** — `reset_demo.sh --open-prs` is idempotent; leaves exactly 2 demo PRs, model
->   v1 `@champion` / no `@challenger`, seeds + grants self-healed.
+> - **Reset** — `reset_demo.sh --open-prs` is idempotent; leaves exactly 2 demo PRs and a
+>   clean model baseline: **dev** `demand_forecaster` v1 `@champion` / no `@challenger`,
+>   **staging + prod wiped** (each bootstraps fresh on the post-merge deploy). Seeds (all 3
+>   schemas) + experiment grants self-healed.
 > The **"Hard-won operational insights"** section below is the single most important read —
 > ~20 real failures had to be fixed to get here, almost all invisible until the code ran as
 > the **CI service principal** on the **serverless** job / **self-hosted** runner.
@@ -142,7 +144,7 @@ against that env, not a re-used artifact. First run per env bootstrap-approves (
 | `bad-pr/` | Legacy linter anti-examples (bad_python.py, bad_sql.sql, broken_bundle). |
 | `resources/jobs/` | DABs job YAML definitions. |
 | `sql/` | SQL assets. |
-| `scripts/reset_demo.sh` | Idempotent demo reset: PRs, branches, UC model aliases, endpoints. |
+| `scripts/reset_demo.sh` | Idempotent demo reset: PRs/branches, UC model across all 3 schemas (dev keeps v1, qa/prod wiped), experiment grants, seed tables, endpoint cleanup. |
 | `.github/workflows/` | `pr-checks.yml`, `modelops-review.yml`, `modelops-fix.yml`, `deploy.yml`. |
 | `databricks.yml` | DABs bundle `modelops-cicd-demo`; targets `dev`/`qa`/`prd`; var `agent_model_version`. |
 | `docs/ado-translation.md` (+ 4 `azure-pipelines-*.yml`) | GitHub Actions → Azure DevOps parity guide. |
@@ -327,5 +329,5 @@ serverless task execution differs from local Python in ways that bite silently.*
 - `.scratch/modelops-cicd-demo/AFK-SESSION-REPORT.md` — chronological record of the
   verification session (local, not committed).
 - `docs/ado-translation.md` — GitHub Actions → Azure DevOps parity.
-- `scripts/reset_demo.sh` — idempotent reset for all demo state (branches/PRs, model aliases,
-  experiment grants, seed tables, endpoint cleanup).
+- `scripts/reset_demo.sh` — idempotent reset for all demo state (branches/PRs, UC model across
+  dev/staging/prod, experiment grants, seed tables, endpoint cleanup).
