@@ -11,3 +11,6 @@ mlflow.db
 
 # editor
 .vscode/
+
+# presenter cola — internal demo runbook + Q&A (public repo; keep out of history)
+DEMO.md
