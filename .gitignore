@@ -11,3 +11,14 @@ mlflow.db
 
 # editor
 .vscode/
+
+# presenter cola — internal demo runbook + Q&A (public repo; keep out of history)
+DEMO.md
+
+# internal working artifacts — not for the public demo repo
+prompt_opus_demo_petrobras.md
+.scratch/
+
+# agent tool skill symlinks (point into gitignored .databricks/; break on fresh clone)
+.claude/
+.cursor/
