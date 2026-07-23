@@ -92,15 +92,17 @@
 
 ### Passo 5 — Aprovar e fazer merge (~1 min)
 
-- **Fazer:** aprovar o PR original (ou o de fix, dependendo do fluxo) e clicar em Merge no GitHub UI.
+- **Antes do merge — mostrar o Gate 2 aprovando (pré-merge):** no check `deploy + integration tests + Gate 2 (dev)` do PR, o modelo foi treinado num dev efêmero e o Gate 2 **aprovou** (challenger não degradou vs. champion — ou bootstrap na primeira vez). Esse é o segundo gate de IA, ANTES do merge.
+- **Dizer:** "Todos os checks obrigatórios estão verdes: linters, o reviewer (depois do fix), E o Gate 2 de IA que treinou o modelo e aprovou a promoção. Só agora o merge fica liberado."
+- **Fazer:** aprovar o PR e clicar em Merge no GitHub UI.
 - **Dizer:** "O humano ainda aprova. O agente tirou o trabalho mecânico, não a decisão."
-- **Esperado:** merge para `main`, aciona `deploy.yml`.
+- **Esperado:** merge para `main`, aciona `deploy.yml` (deploy-only).
 
-### Passo 6 — deploy-dev + Gate 2 aprova (bootstrap/run limpo) (~5–8 min)
+### Passo 6 — deploy pós-merge (dev → qa → prod) (~2–3 min até o gate qa)
 
-- **Fazer:** abrir Actions → run de deploy. Monitorar `deploy-dev` e depois `train-and-promote-dev`.
-- **Dizer:** "Após o merge, o pipeline faz deploy no dev e em seguida roda o `model_training_job`: treino → registro → Gate 2 → promoção. Como este é o primeiro run (ou o reset deixou só v1), o Gate 2 vai auto-aprovar no bootstrap."
-- **Esperado:** `deploy-dev` verde; `model_training_job` verde; `@champion` avança para nova versão.
+- **Fazer:** abrir Actions → run de `deploy`. Monitorar `deploy-dev` (rápido — só `bundle deploy`, o modelo já foi validado e promovido no check pré-merge).
+- **Dizer:** "Como o modelo já passou pelo Gate 2 antes do merge, o pós-merge é só deploy: promove o bundle pro dev compartilhado e segue pros gates humanos de qa/prod."
+- **Esperado:** `deploy-dev` verde; pipeline pausa no gate **qa**.
 
 ### Passo 7 — Aprovar gate qa (dar o botão para o cliente) (~2 min)
 
@@ -116,23 +118,30 @@
 
 ---
 
-## Passo a passo — Cenário 2: gate-blocker (Gate 2 bloqueia)
+## Passo a passo — Cenário 2: gate-blocker (Gate 2 bloqueia o MERGE)
 
 **Duração estimada: 10–15 min**
+
+> **Arquitetura (dizer antes):** "O Gate 2 roda ANTES do merge, como um required check.
+> Se o modelo degrada, o próprio merge é bloqueado — o código ruim nunca chega no `main`.
+> Depois do merge é só deploy pra qa/prod, porque o modelo já foi validado."
 
 ### Passo 1 — Abrir o PR gate-blocker (~2 min)
 
 - **Fazer:** abrir o PR `demo/ml-gate-blocker` no browser.
-- **Dizer:** "Este PR parece impecável para o Gate 1 — nenhuma violação de política. A mudança remove algumas features do config e corta `n_estimators` para 5. Vamos ver o que acontece depois do merge."
-- **Esperado:** Gate 1 **verde** (sem BLOCKERs), PR passa no review.
+- **Dizer:** "Este PR parece impecável para o Gate 1 — nenhuma violação de política. A mudança corta `n_estimators` para 5 e remove features, mas atualiza o `max_acceptable_mae` junto, então o teste de regressão e o reviewer passam. Sintaticamente e por política, está limpo."
+- **Esperado:** Ruff / sqlfluff / bundle-validate / Gate 1 (reviewer) todos **verdes**.
 
-### Passo 2 — Merge → Gate 2 bloqueia (~5–8 min)
+### Passo 2 — O check pré-merge treina o modelo e o Gate 2 bloqueia (~5–8 min)
 
-- **Fazer:** aprovar e fazer merge. Aguardar o `model_training_job` rodar. Mostrar o log da task `promotion_gate` quando ela falhar.
-- **Dizer:** "Gate 1 passou. O modelo foi treinado e registrado como `@challenger`. Mas o Gate 2 comparou as métricas do challenger com o champion e detectou degradação — MAE piorou além do threshold configurado. Decisão: BLOCK. O `@champion` não se move. O job falha com o raciocínio completo visível no log e no MLflow."
-- **Mostrar:** no MLflow UI, a trace do gate com o reasoning do LLM e os findings citados (ML-03).
-- **Dizer:** "Isso demonstra por que o Gate 2 existe: mudanças que passam pela política de código mas degradam o modelo silenciosamente são exatamente o que o Gate 2 captura. O humano ainda precisaria aprovar — mas o primeiro filtro fez o trabalho pesado."
-- **Esperado:** job falha na task `promotion_gate`; `@champion` continua em v1; trace MLflow visível.
+- **Fazer:** mostrar o check `deploy + integration tests + Gate 2 (dev)` em andamento nos checks do PR. Ele faz deploy efêmero, roda os testes, e então treina o challenger e roda o promotion gate.
+- **Dizer:** "Aqui está o pulo do gato: esse check treina o modelo do PR num ambiente dev efêmero e roda o Gate 2 de IA. O Gate 2 comparou o MAE do challenger com o champion atual e detectou degradação — o MAE piorou muito. Decisão: BLOCK, citando ML-03. O check fica **vermelho** e o **botão de merge é bloqueado**."
+- **Mostrar:** o check vermelho no PR + no MLflow UI a trace do gate com o reasoning do LLM e o finding citado (ML-03: challenger MAE > champion MAE).
+- **Dizer:** "Repara: o `@champion` nunca se moveu e o `main` nunca recebeu esse código. Uma mudança que passou por sintaxe, política E pelo teste de regressão — mas que degrada o modelo silenciosamente — foi barrada antes de entrar. É exatamente por isso que o Gate 2 existe, e por isso ele roda antes do merge."
+- **Esperado:** check `...Gate 2 (dev)` = **failure** (task `promotion_gate` BLOCK/ML-03); merge bloqueado; `@champion` continua em v1; trace MLflow visível.
+
+> **Plano B se a task `train` demorar:** o check leva ~5–8 min (deploy efêmero + treino +
+> LLM). Enquanto roda, abrir o MLflow Experiments e narrar o tracking ao vivo.
 
 ---
 

@@ -94,10 +94,19 @@ DABs deployment — it is NOT the demo protagonist. The ML pipeline under `src/m
 ### The pipeline (GitHub Actions + DABs)
 
 ```
-PR → pr-checks (Ruff + sqlfluff + bundle validate)  +  modelops-review (Gate 1 Check Run)
-   → /modelops-fix (bot opens fix PR)  → human approval + merge to main
-   → deploy-dev + model_training_job (Gate 2)  → [gate qa]  → deploy-qa  → [gate prod]  → deploy-prod
+PR (pre-merge, all gate the merge):
+   pr-checks:  Ruff + sqlfluff + bundle-validate
+             + integration (ephemeral per-PR dev deploy → tests → Gate 2: train → register
+               → AI promotion gate → promote;  BLOCK ⇒ check red ⇒ merge blocked)
+   modelops-review:  Gate 1 (reviewer) Check Run  →  /modelops-fix (bot opens fix PR)
+   → human approval + merge to main
+Post-merge (deploy.yml, deploy-only — model already validated pre-merge):
+   deploy-dev  → [gate qa]  → deploy-qa  → [gate prod]  → deploy-prod
 ```
+
+**Why Gate 2 is pre-merge:** if the promotion gate ran post-merge, a degraded model's
+config would already be on `main` before the gate rejected it (broken main + red deploy).
+Running it as a required pre-merge check means a BLOCK stops the merge — `main` stays clean.
 
 ## Repo map
 
