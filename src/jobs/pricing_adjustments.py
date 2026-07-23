@@ -4,15 +4,20 @@
 Part of the retail pipeline — applies a price adjustment to sales using
 the corporate pricing reference for the given region.
 
-The gold_pricing table is referenced via DABs-injected variables so the same
-code runs in all environments without editing.
+NOTE: This version contains a deliberate ENV-01 violation for the Gate 1 demo:
+it reads the gold_pricing table from the PROD schema while running in a DEV context.
+
+The file is deliberately LINT-CLEAN (Ruff/sqlfluff pass) — the only problem is the
+semantic ENV-01 cross-env reference, which only the AI reviewer (Gate 1) can catch.
 """
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-# Catalog/schema are injected by DABs so the same code runs in dev, staging, and prod.
-PRICING_REF = "${var.catalog}.${var.schema}.gold_pricing"
+# ENV-01 BLOCKER: hardcoded prod schema reference in a dev-context job.
+# A dev job must never read from the prod schema directly.
+# Fix: use the DABs variable ${var.catalog}.${var.schema}.gold_pricing instead.
+PROD_PRICING_REF = "malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing"
 
 
 def apply_price_adjustments(region: str, pricing_reference: DataFrame, adjustments=None):
