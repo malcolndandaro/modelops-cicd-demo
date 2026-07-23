@@ -98,9 +98,9 @@ jobs:
       - name: Serverless integration tests
         run: |
           python3 -m venv .venv-it && . .venv-it/bin/activate
-          # scikit-learn/numpy/pyyaml are needed by tests/test_demand_forecaster.py (the
-          # metric-regression gate) and the src/ml training code it imports.
-          pip install --quiet --disable-pip-version-check "databricks-connect>=15.4,<16" "databricks-sdk>=0.30" pytest "scikit-learn>=1.3" numpy pyyaml
+          # mlflow + scikit-learn/numpy/pyyaml are needed by tests/test_demand_forecaster.py
+          # (the metric-regression gate) and the src/ml training code it imports.
+          pip install --quiet --disable-pip-version-check "databricks-connect>=15.4,<16" "databricks-sdk>=0.30" pytest "mlflow>=3.0" "scikit-learn>=1.3" numpy pyyaml
           pytest tests/ -v --tb=short
       - name: Tear down the ephemeral PR deployment
         if: always()
