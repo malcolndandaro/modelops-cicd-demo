@@ -229,6 +229,27 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 2.6 Ensure the retail seed tables exist (fact_sales / dim_store).
+# The pre-merge integration tests (tests/test_pipeline_serverless.py) read these real
+# UC tables; if they're missing the gate fails with TABLE_OR_VIEW_NOT_FOUND. Seed once
+# (idempotent — seed_retail.py overwrites). Skips if already present.
+# ---------------------------------------------------------------------------
+info "Step 2.6: Ensuring retail seed tables (fact_sales/dim_store) exist..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+if databricks --profile "$PROFILE" tables get "${CATALOG}.${SCHEMA}.fact_sales" >/dev/null 2>&1; then
+    ok "  Seed tables already present"
+else
+    info "  Seeding retail source tables (Databricks Connect serverless)..."
+    if DATABRICKS_CONFIG_PROFILE="$PROFILE" MODELOPS_SEED_SCHEMA="$SCHEMA" \
+        python3 "${REPO_ROOT}/data/seed_retail.py" >/dev/null 2>&1; then
+        ok "  Seeded ${CATALOG}.${SCHEMA}.fact_sales + dim_store"
+    else
+        echo "  WARNING: seed_retail.py failed — retail integration tests may fail. Run it manually."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # 3. UC model reset: keep demand_forecaster v1, @champion → v1, remove @challenger
 # ---------------------------------------------------------------------------
 info "Step 3/5: Resetting UC model aliases for demand_forecaster..."
