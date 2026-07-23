@@ -137,15 +137,13 @@ def retrieve_rules(query_text: str) -> list[dict]:
 
 
 def _fm_call(system: str, user: str) -> str | None:
-    # Call GLM-5-2 via the OpenAI client over /serving-endpoints (consistent with the
-    # served agent). Runs on the CI runner authed as the CI SP (oauth-m2m env vars).
+    # Call GLM-5-2 via the SDK's OpenAI-compatible client. On the CI runner the SP
+    # authenticates with oauth-m2m (no static PAT), so cfg.token is None and constructing
+    # openai.OpenAI(api_key=...) directly fails with "Missing credentials". get_open_ai_client()
+    # wraps the SDK's dynamic OAuth token minting, so it works under oauth-m2m.
     from databricks.sdk import WorkspaceClient  # lazy
-    from openai import OpenAI  # lazy
 
-    cfg = WorkspaceClient().config
-    host = (os.environ.get("DATABRICKS_HOST") or cfg.host).rstrip("/")
-    token = os.environ.get("DATABRICKS_TOKEN") or cfg.token
-    client = OpenAI(api_key=token, base_url=f"{host}/serving-endpoints")
+    client = WorkspaceClient().serving_endpoints.get_open_ai_client()
     resp = client.chat.completions.create(
         model=LLM_ENDPOINT,
         messages=[
