@@ -6,9 +6,10 @@ the corporate pricing reference for the given region.
 
 NOTE: This version contains a deliberate ENV-01 violation for the Gate 1 demo:
 it reads the gold_pricing table from the PROD schema while running in a DEV context.
-"""
 
-import os
+The file is deliberately LINT-CLEAN (Ruff/sqlfluff pass) — the only problem is the
+semantic ENV-01 cross-env reference, which only the AI reviewer (Gate 1) can catch.
+"""
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
