@@ -3,18 +3,14 @@
 
 Part of the retail pipeline — applies a price adjustment to sales using
 the corporate pricing reference for the given region.
-
-The catalog/schema is resolved per target environment via DABs-injected
-variables, so the same code runs safely in dev, staging, and prod.
 """
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-# DABs-injected catalog/schema reference, resolved per target environment.
-# This keeps environment isolation intact: dev targets dev catalogs, prod
-# targets prod catalogs — no hardcoded cross-environment references.
-PROD_PRICING_REF = "${var.catalog}.${var.schema}.gold_pricing"
+# DABs-injected catalog and schema variables ensure the same code runs
+# safely in all environments (dev/staging/prod) without cross-env references.
+PRICING_REF = "${var.catalog}.${var.schema}.gold_pricing"
 
 
 def apply_price_adjustments(region: str, pricing_reference: DataFrame, adjustments=None):
