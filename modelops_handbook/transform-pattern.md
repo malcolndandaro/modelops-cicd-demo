@@ -1,42 +1,42 @@
-# Transform Pattern — Lógica modular y testeable
+# Transform Pattern — Modular, testable logic
 
-> La lógica de negocio se escribe como funciones puras `df -> df`, componibles con
-> `DataFrame.transform()`. Es el estándar de ModelOps para código PySpark testeable.
+> Business logic is written as pure `df -> df` functions, composable with
+> `DataFrame.transform()`. This is the ModelOps standard for testable PySpark code.
 
-### [TP-01] Las transformaciones son funciones puras DataFrame -> DataFrame
+### [TP-01] Transformations are pure DataFrame -> DataFrame functions
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › Transform Pattern › TP-01
 
-Cada paso de transformación es una función que recibe un DataFrame y devuelve un
-DataFrame, sin leer ni escribir tablas, sin crear una SparkSession y sin efectos
-secundarios. Así se puede testear en segundos con un DataFrame mínimo.
-❌ Una función que adentro hace `spark.read`, `.write` o recibe `spark` como parámetro.
+Each transformation step is a function that takes a DataFrame and returns a DataFrame — with
+no table reads or writes, no SparkSession creation, and no side effects. That makes it
+testable in seconds with a minimal DataFrame.
+❌ A function that internally calls `spark.read`, `.write`, or takes `spark` as a parameter.
 ✅ `def filter_active_products(df: DataFrame) -> DataFrame: return df.filter(...)`.
 
-### [TP-02] Evitar acciones en el driver dentro de la transformación
+### [TP-02] Avoid driver actions inside a transformation
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › Transform Pattern › TP-02
 
-No usar `.collect()`, `.toPandas()`, `.first()` ni `.count()` innecesarios dentro de
-la lógica de transformación: traen datos al driver, rompen la paralelización y
-suelen esconder un bug de diseño. Mantener el trabajo en Spark de forma declarativa.
-❌ `baseline = df.select("base_price").collect()[0][0]` para luego operar fila a fila.
-✅ Calcular con columnas: `df.withColumn("adjusted", F.col("base_price") * (1 + pct))`.
+Do not use unnecessary `.collect()`, `.toPandas()`, `.first()`, or `.count()` inside the
+transformation logic: they pull data to the driver, break parallelism, and usually hide a
+design bug. Keep the work in Spark, declaratively.
+❌ `baseline = df.select("base_price").collect()[0][0]` to then operate row by row.
+✅ Compute with columns: `df.withColumn("adjusted", F.col("base_price") * (1 + pct))`.
 
-### [TP-03] Nombrar cada transform por su intención y encadenar con .transform()
+### [TP-03] Name each transform by its intent and chain with .transform()
 - **Severity:** STYLE
 - **Citation:** ModelOps Handbook › Transform Pattern › TP-03
 
-El pipeline se lee como una cadena de transforms con nombre claro
-(`df.transform(normalize_sku).transform(filter_active_products)`), no como un bloque
-monolítico. Cada nombre describe qué hace, en inglés.
+The pipeline reads as a chain of clearly named transforms
+(`df.transform(normalize_sku).transform(filter_active_products)`), not a monolithic block.
+Each name describes what it does.
 
-### [TP-04] Parámetros extra vía currying, no leyendo sys.argv/env adentro
+### [TP-04] Extra parameters via currying, not by reading sys.argv/env inside
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › Transform Pattern › TP-04
 
-Si un transform necesita un parámetro adicional, se usa una función externa que
-devuelve el transform (currying). Leer `sys.argv`, variables de entorno o widgets
-dentro de la función de transformación la vuelve impura y no testeable.
-❌ `region = sys.argv[1]` dentro de la función de cálculo.
+If a transform needs an extra parameter, use an outer function that returns the transform
+(currying). Reading `sys.argv`, environment variables, or widgets inside the transformation
+function makes it impure and untestable.
+❌ `region = sys.argv[1]` inside the compute function.
 ✅ `def enrich_with_route(routes_df): def _t(df): ...; return _t`.

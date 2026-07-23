@@ -1,38 +1,37 @@
-# PII & Secret Policy — Datos sensibles y credenciales
+# PII & Secret Policy — Sensitive data and credentials
 
-> Reglas de seguridad de ModelOps para manejo de secretos, inyección de SQL y datos
-> personales (PII) en código de datos.
+> ModelOps security rules for handling secrets, SQL injection, and personal data (PII) in
+> data code.
 
-### [SEC-01] Prohibido secretos o credenciales en el código
+### [SEC-01] No secrets or credentials in code
 - **Severity:** BLOCKER
 - **Citation:** ModelOps Handbook › PII & Secret Policy › SEC-01
 
-Tokens, passwords, client secrets, connection strings y API keys nunca van en el
-código fuente ni en notebooks. Se usan Databricks Secrets (`dbutils.secrets.get`) o
-Azure Key Vault. Un secreto en un repo público se considera comprometido.
-❌ `TOKEN = "dapi…"` o `password="…"` en el código.
+Tokens, passwords, client secrets, connection strings, and API keys never go in source code or
+notebooks. Use Databricks Secrets (`dbutils.secrets.get`) or a cloud key vault. A secret in a
+public repo is considered compromised.
+❌ `TOKEN = "dapi…"` or `password="…"` in code.
 ✅ `dbutils.secrets.get(scope="modelops", key="…")`.
 
-### [SEC-02] No construir SQL por interpolación de input externo
+### [SEC-02] Do not build SQL by interpolating external input
 - **Severity:** BLOCKER
 - **Citation:** ModelOps Handbook › PII & Secret Policy › SEC-02
 
-Construir queries concatenando o interpolando input externo (args, widgets, request)
-abre inyección de SQL. Se usan queries parametrizadas / binds, o validación estricta
-contra una lista blanca.
-❌ `query = f"SELECT * FROM t WHERE region = '{region}'"` con `region` desde `sys.argv`.
-✅ Parámetros del statement execution / binds, o validar `region` contra un set permitido.
+Building queries by concatenating or interpolating external input (args, widgets, request)
+opens SQL injection. Use parameterized queries / binds, or strict allowlist validation.
+❌ `query = f"SELECT * FROM t WHERE region = '{region}'"` with `region` from `sys.argv`.
+✅ Statement-execution parameters / binds, or validate `region` against an allowed set.
 
-### [SEC-03] No loguear PII
+### [SEC-03] Do not log PII
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › PII & Secret Policy › SEC-03
 
-Emails, nombres, direcciones, teléfonos y otros datos personales no se imprimen en
-`print` ni en logs. Si se necesita trazabilidad, se enmascara o se usan identificadores.
+Emails, names, addresses, phone numbers, and other personal data are not printed via `print`
+or into logs. If traceability is needed, mask the value or use identifiers.
 
-### [SEC-04] Acceso a datos sensibles vía gobernanza de Unity Catalog
+### [SEC-04] Access sensitive data via Unity Catalog governance
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › PII & Secret Policy › SEC-04
 
-El acceso a columnas sensibles se hace mediante column masks / row filters de UC, no
-copiando datos a tablas ad-hoc sin gobernanza.
+Access to sensitive columns goes through UC column masks / row filters, not by copying data
+into ungoverned ad-hoc tables.

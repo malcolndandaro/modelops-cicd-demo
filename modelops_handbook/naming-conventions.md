@@ -1,31 +1,32 @@
-# Naming Conventions — Nombres de recursos y código
+# Naming Conventions — Resource and code names
 
-> Convenciones de nombres de ModelOps para tablas, código y service principals.
+> ModelOps naming conventions for tables, code, and service principals.
 
-### [NM-01] Tablas en snake_case con prefijo de capa
+### [NM-01] Tables in snake_case with a layer prefix
 - **Severity:** STYLE
 - **Citation:** ModelOps Handbook › Naming Conventions › NM-01
 
-Tablas y vistas en `snake_case`, con la capa explícita (`bronze_`, `silver_`,
-`gold_`) o por esquema de capa. Ej. `gold_pricing`, `fact_sales`, `dim_product`.
+Tables and views in `snake_case`, with the layer made explicit (`bronze_`, `silver_`,
+`gold_`) or by a per-layer schema. E.g. `gold_pricing`, `fact_sales`, `dim_product`.
 
-### [NM-02] Funciones y variables en snake_case y descriptivas
+### [NM-02] Functions and variables in snake_case and descriptive
 - **Severity:** STYLE
 - **Citation:** ModelOps Handbook › Naming Conventions › NM-02
 
-`snake_case` para funciones y variables; nombres que describen intención. Evitar
-nombres de un solo carácter salvo índices de loop.
+`snake_case` for functions and variables; names that describe intent. Avoid single-character
+names except loop indices.
 
-### [NM-03] Identificadores en inglés; comentarios y PR en español
+### [NM-03] Identifiers, comments, and docs in English
 - **Severity:** STYLE
 - **Citation:** ModelOps Handbook › Naming Conventions › NM-03
 
-Nombres de código (funciones, columnas, variables) en inglés para consistencia; los
-comentarios, descripciones de PR y documentación del equipo van en español.
+Code names (functions, columns, variables), comments, PR descriptions, and team documentation
+are all written in English for consistency across the team and tooling.
 
-### [NM-04] Service Principals: sp-<area>-<proyecto>-<env>
+### [NM-04] Service Principals: sp-<area>-<project>-<env>
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › Naming Conventions › NM-04
 
-Los SP siguen `sp-<area>-<proyecto>-<env>`, p.ej. `sp-modelops-bakery-prd`. Un SP por
-proyecto y ambiente, alineado con la política de identidad de ModelOps.
+Service principals follow `sp-<area>-<project>-<env>`, e.g. `sp-modelops-ci` for the shared CI
+identity or `sp-modelops-forecaster-prod` for a per-env project SP. One SP per project and
+environment, aligned with the ModelOps identity policy.

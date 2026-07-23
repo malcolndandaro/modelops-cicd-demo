@@ -1,32 +1,32 @@
-# Catalog-per-Env — Aislamiento de ambientes
+# Catalog-per-Env — Environment isolation
 
-> Cada ambiente (dev / qa / prod) vive en su propio catálogo o esquema. El código
-> nunca debe cruzar ambientes ni hardcodear nombres de catálogo.
+> Each environment (dev / staging / prod) lives in its own catalog or schema. Code must
+> never cross environments or hardcode a catalog name.
 
-### [ENV-01] Prohibido referenciar catálogos de otro ambiente
+### [ENV-01] Referencing another environment's catalog is forbidden
 - **Severity:** BLOCKER
 - **Citation:** ModelOps Handbook › Catalog-per-Env › ENV-01
 
-Un job que corre en `dev` o `qa` nunca debe leer ni escribir un catálogo o esquema
-de `prod` (p.ej. `bimbo_prd`, `*_prd`, `*.prod`). Cruzar ambientes rompe el
-aislamiento, expone datos productivos y hace que los tests contaminen prod.
-❌ `spark.table("malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing")` dentro de un job de dev.
-❌ `f"SELECT * FROM malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing"` en código que se despliega a dev/qa.
-✅ Referenciar el catálogo del ambiente actual vía variable: `{catalog}.gold_pricing`.
+A job running in `dev` or `staging` must never read from or write to a `prod` catalog or
+schema (e.g. `*_prod`, `*.prod`, `agentic2_mlops_prod`). Crossing environments breaks
+isolation, exposes production data, and lets tests contaminate prod.
+❌ `spark.table("malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing")` inside a dev job.
+❌ `f"SELECT * FROM malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing"` in code deployed to dev/staging.
+✅ Reference the current environment's catalog via a variable: `{catalog}.{schema}.gold_pricing`.
 
-### [ENV-02] Parametrizar el catálogo y el esquema con variables de DABs
+### [ENV-02] Parameterize the catalog and schema with DABs variables
 - **Severity:** SUGGESTION
 - **Citation:** ModelOps Handbook › Catalog-per-Env › ENV-02
 
-El nombre del catálogo/esquema no se hardcodea: se inyecta como `${var.catalog}` /
-`${var.schema}` desde el target de DABs, o como job parameter. Así el mismo código
-corre en los tres ambientes sin editar una línea.
-❌ Literal `"bimbo_demo.dev"` repetido en el código.
-✅ `dbutils.widgets.get("catalog")` o `${var.catalog}` resuelto por el bundle.
+The catalog/schema name is never hardcoded: it is injected as `${var.catalog}` /
+`${var.schema}` from the DABs target, or as a job parameter. That way the same code runs in
+all three environments without editing a line.
+❌ A literal `"malcoln_aws_stable_catalog.agentic2_mlops_dev"` repeated throughout the code.
+✅ `dbutils.widgets.get("catalog")` or `${var.catalog}` resolved by the bundle.
 
-### [ENV-03] No hardcodear URLs de workspace ni IDs de cluster
+### [ENV-03] Do not hardcode workspace URLs or cluster IDs
 - **Severity:** STYLE
 - **Citation:** ModelOps Handbook › Catalog-per-Env › ENV-03
 
-Hosts de workspace, cluster ids y warehouse ids dependen del ambiente y deben venir
-de variables del bundle/target, nunca incrustados en el código fuente.
+Workspace hosts, cluster ids, and warehouse ids depend on the environment and must come from
+bundle/target variables, never embedded in source code.
