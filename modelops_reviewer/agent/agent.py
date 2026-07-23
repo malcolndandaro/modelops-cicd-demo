@@ -110,8 +110,15 @@ def _call_llm(system: str, user: str) -> str:
     sp_id = os.environ.get("MODELOPS_SP_CLIENT_ID")
     sp_secret = os.environ.get("MODELOPS_SP_CLIENT_SECRET")
     if sp_id and sp_secret:
+        # CRITICAL: force oauth-m2m. Inside Model Serving the injected OBO token
+        # (DATABRICKS_TOKEN) is ALSO present, so without an explicit auth_type the SDK
+        # sees two methods and errors ("more than one authorization method configured:
+        # oauth and pat") or silently uses the OBO token (which lacks USE CATALOG on
+        # system → 403). Pinning oauth-m2m makes it authenticate as the CI SP.
         host = os.environ.get("DATABRICKS_HOST") or WorkspaceClient().config.host
-        w = WorkspaceClient(host=host, client_id=sp_id, client_secret=sp_secret)
+        w = WorkspaceClient(
+            host=host, client_id=sp_id, client_secret=sp_secret, auth_type="oauth-m2m"
+        )
     else:
         w = WorkspaceClient()  # ambient auth (local validation / creator context)
     client = w.serving_endpoints.get_open_ai_client()

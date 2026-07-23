@@ -84,6 +84,8 @@ except ValueError as e:
                 environment_vars={**base_env, **_env_vars},
             )
         ],
-        traffic_config=TrafficConfig(routes=[Route(served_model_name=se_name, traffic_percentage=100)]),
+        traffic_config=TrafficConfig(
+            routes=[Route(served_model_name=se_name, traffic_percentage=100)]
+        ),
     )
     print(f"update_config OK — {ENDPOINT} serves v{version} with FM-auth env vars, 100% traffic")
