@@ -71,7 +71,7 @@ def main() -> None:
         "flagged_transform_violation",
         "zero_false_positives_on_clean_code",
     ):
-        vals = [v for k, v in metrics.items() if k.startswith(s) and isinstance(v, (int, float))]
+        vals = [v for k, v in metrics.items() if k.startswith(s) and isinstance(v, int | float)]
         if not vals or min(vals) < 1.0:
             failed.append(s)
     if failed:

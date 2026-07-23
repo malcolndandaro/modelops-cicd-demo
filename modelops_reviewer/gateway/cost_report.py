@@ -1,8 +1,8 @@
 """Cost/usage + recent-traces view from the ModelOps Reviewer inference table (slice 10).
 
-Source: `malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer_payload` (AI Gateway inference logging on the
-agent endpoint). Prints a Markdown summary: per-day reviews + latency + a token
-ESTIMATE, plus a recent-traces panel.
+Source: the UC table `...agentic2_mlops_dev.modelops_reviewer_payload` (AI Gateway
+inference logging on the agent endpoint). Prints a Markdown summary: per-day reviews +
+latency + a token ESTIMATE, plus a recent-traces panel.
 
 Honesty: the token figure is a LOWER BOUND — chars/4 over the agent's *outer* request/
 response only; it excludes the inner FM tool-calling loop and reasoning tokens. The USD

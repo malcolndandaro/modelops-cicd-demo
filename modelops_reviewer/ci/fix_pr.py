@@ -1,4 +1,4 @@
-"""CI fix-mode: /modelops-fix → generate + validate fixes → push to the PR branch.
+"""CI fix-mode: /modelops-fix → generate + validate fixes → open a fix PR.
 
 Triggered by an `issue_comment` containing `/modelops-fix` (production) or by
 `workflow_dispatch` (testing). Flow:
@@ -6,8 +6,10 @@ Triggered by an `issue_comment` containing `/modelops-fix` (production) or by
   2. re-review the PR to get findings, grouped by file;
   3. ask the FM for the COMPLETE corrected file per finding-bearing file;
   4. validate each parses (compile/yaml) — abort the whole push if any is invalid;
-  5. the ModelOps Bot (MODELOPS_BOT_TOKEN, a fine-grained PAT) pushes ONE commit to the
-     PR head branch — which re-triggers modelops-review + pr-checks.
+  5. the ModelOps Bot (MODELOPS_BOT_TOKEN, a fine-grained PAT) creates a new branch
+     `modelops-fix/pr-<PR>-<short-run-id>`, commits the fixes there, pushes it, then
+     opens a NEW pull request against the original PR's head branch, and comments on
+     the original PR with a link to the fix PR.
 Never hard-fails the job (exits 0); posts a comment with the outcome.
 
 GitHub App is the production identity (ADR-0003); slice 01 chose a fine-grained PAT
@@ -34,11 +36,20 @@ GH_TOKEN = os.environ.get("GH_TOKEN", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ENDPOINT = os.environ.get("ENDPOINT_NAME", "modelops-reviewer")
 LLM_ENDPOINT = os.environ.get("LLM_ENDPOINT", "databricks-glm-5-2")
+# Short run id — passed in via modelops-fix.yml env (GITHUB_RUN_ID). Falls back to
+# "local" so local test runs don't break.
+RUN_ID = os.environ.get("RUN_ID", "local")
 _GH = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
 
 
 def gh_get(path: str) -> dict:
     r = requests.get(f"https://api.github.com{path}", headers=_GH, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def gh_post(path: str, body: dict) -> dict:
+    r = requests.post(f"https://api.github.com{path}", headers=_GH, json=body, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -59,7 +70,7 @@ def get_findings(diff: str) -> list[dict]:
     resp = w.api_client.do(
         "POST",
         f"/serving-endpoints/{ENDPOINT}/invocations",
-        body={"input": [{"role": "user", "content": diff or "(diff vacío)"}]},
+        body={"input": [{"role": "user", "content": diff or "(empty diff)"}]},
     )
     text = "".join(
         c.get("text", "")
@@ -71,24 +82,48 @@ def get_findings(diff: str) -> list[dict]:
 
 
 def retrieve_rules(query_text: str) -> list[dict]:
-    """Handbook rules for the fix prompt — mirrors the review agent's Vector Search
-    retrieval so the bot's fix follows the ACTUAL handbook, not just finding summaries.
+    """Handbook rules for the fix prompt — queries the Knowledge Assistant (KA) endpoint
+    so the bot's fix follows the ACTUAL handbook, not just finding summaries.
     Best-effort: a fix still proceeds (on the finding citations) if retrieval fails."""
-    cols = ["rule_id", "title", "content", "citation", "severity_hint"]
+    ka_endpoint = os.environ.get("KA_ENDPOINT", "modelops-handbook-ka")
     try:
         from databricks.sdk import WorkspaceClient  # lazy
 
-        res = WorkspaceClient().vector_search_indexes.query_index(
-            index_name="malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_handbook_rules_idx",
-            columns=cols,
-            query_text=(query_text[:2000] or "coding standards"),
-            num_results=8,
+        w = WorkspaceClient()
+        resp = w.api_client.do(
+            "POST",
+            f"/serving-endpoints/{ka_endpoint}/invocations",
+            body={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Which ModelOps Handbook rules are relevant for fixing this code? "
+                            f"{query_text[:1500]}"
+                        ),
+                    }
+                ]
+            },
         )
-        rows = (res.result.data_array if res.result else None) or []
-        return [dict(zip(cols, row, strict=False)) for row in rows]
+        # KA returns cited answer text — wrap as a single synthetic rule so
+        # build_fix_prompt can include it as grounding context.
+        ka_text = ""
+        for choice in (resp.get("choices") or []):
+            msg = (choice.get("message") or {})
+            ka_text += msg.get("content", "")
+        if ka_text.strip():
+            return [
+                {
+                    "rule_id": "KA-GROUNDING",
+                    "citation": f"modelops-handbook-ka ({ka_endpoint})",
+                    "content": ka_text.strip()[:2000],
+                    "title": "Knowledge Assistant grounding",
+                    "severity_hint": "SUGGESTION",
+                }
+            ]
     except Exception as e:  # noqa: BLE001 — retrieval is best-effort
-        print(f"rule retrieval degraded: {type(e).__name__}: {e}")
-        return []
+        print(f"KA rule retrieval degraded: {type(e).__name__}: {e}")
+    return []
 
 
 def _fm_call(system: str, user: str) -> str | None:
@@ -149,7 +184,7 @@ def main() -> None:
     head_repo = (pr.get("head", {}).get("repo") or {}).get("full_name")
     base_repo = (pr.get("base", {}).get("repo") or {}).get("full_name")
     if head_repo != base_repo:
-        comment("🤖 **ModelOps Bot**: el autofix no opera sobre PRs desde forks (seguridad).")
+        comment("🤖 **ModelOps Bot**: autofix does not operate on fork PRs (security).")
         return
 
     try:
@@ -162,7 +197,7 @@ def main() -> None:
         protected = False
     ok, reason = review_core.is_authorized(perm, protected)
     if not ok:
-        comment(f"🤖 **ModelOps Bot** no puede aplicar el arreglo: {reason}")
+        comment(f"🤖 **ModelOps Bot** cannot apply fix: {reason}")
         return
 
     diff = _git("--no-pager", "diff", f"origin/{pr['base']['ref']}...HEAD").stdout
@@ -170,7 +205,7 @@ def main() -> None:
     findings = get_findings(diff)
     by_file = review_core.select_fixable(findings, changed_files)  # confine to PR's changed files
     if not by_file:
-        comment("🤖 **ModelOps Bot**: no hay hallazgos aplicables en archivos de este PR.")
+        comment("🤖 **ModelOps Bot**: no applicable findings in this PR's changed files.")
         return
 
     changed: dict[str, str] = {}
@@ -184,8 +219,8 @@ def main() -> None:
         valid, err = review_core.validate_content(path, new)
         if not valid:
             comment(
-                f"🤖 **ModelOps Bot**: el arreglo propuesto para `{path}` no es válido "
-                f"({err}); no se hizo push."
+                f"🤖 **ModelOps Bot**: the proposed fix for `{path}` is not valid "
+                f"({err}); no push was made."
             )
             return
         if not new or new == original:
@@ -209,32 +244,68 @@ def main() -> None:
             if not lint_ok:
                 p.write_text(original, encoding="utf-8")  # revert working tree; push nothing
                 comment(
-                    f"🤖 **ModelOps Bot**: el arreglo de `{path}` siguió fallando el linter "
-                    f"tras un reintento; no se hizo push.\n\n```\n{lint_out.strip()[:1000]}\n```"
+                    f"🤖 **ModelOps Bot**: the fix for `{path}` kept failing the linter "
+                    f"after a retry; no push was made.\n\n```\n{lint_out.strip()[:1000]}\n```"
                 )
                 return
         changed[path] = new
 
     if not changed:
-        comment("🤖 **ModelOps Bot**: no se generaron cambios aplicables.")
+        comment("🤖 **ModelOps Bot**: no applicable changes were generated.")
         return
+
+    # Create a new fix branch, commit, push, open a PR, comment on the original PR.
+    short_run = str(RUN_ID)[:8]
+    fix_branch = f"modelops-fix/pr-{PR}-{short_run}"
 
     _git("config", "user.name", "ModelOps Bot")
     _git("config", "user.email", "modelops-bot@users.noreply.github.com")
+    # Create and switch to the fix branch from current HEAD (which is the PR head).
+    _git("checkout", "-b", fix_branch)
     _git("add", *changed)
     files = ", ".join(sorted(changed))
-    _git("commit", "-m", f"fix(modelops): aplica arreglos del ModelOps Reviewer ({files})")
+    _git("commit", "-m", f"fix(modelops): apply ModelOps Reviewer fixes ({files})")
+
     push = _git(
-        "push", f"https://x-access-token:{BOT_TOKEN}@github.com/{REPO}.git", f"HEAD:{head_ref}"
+        "push",
+        f"https://x-access-token:{BOT_TOKEN}@github.com/{REPO}.git",
+        f"HEAD:{fix_branch}",
     )
     if push.returncode != 0:
-        print(f"push failed: {push.stderr}")  # details to the secret-masked Actions log only
-        comment("🤖 **ModelOps Bot**: el push falló (ver logs del workflow).")
+        print(f"push failed: {push.stderr}")  # details to secret-masked Actions log only
+        comment("🤖 **ModelOps Bot**: push failed (see workflow logs).")
         return
-    comment(
-        f"🤖 **ModelOps Bot** aplicó arreglos en: `{files}`. "
-        "La revisión y el CI se re-ejecutarán automáticamente sobre el nuevo commit."
+
+    # Open a new PR: base = original PR's head branch, head = fix branch.
+    pr_body = (
+        f"Automated fixes proposed by ModelOps Reviewer for PR #{PR}.\n\n"
+        f"**Files changed:** {files}\n\n"
+        f"Triggered via `/modelops-fix` on #{PR}."
     )
+    try:
+        new_pr = gh_post(
+            f"/repos/{REPO}/pulls",
+            {
+                "title": f"fix(modelops): automated fixes for PR #{PR}",
+                "head": fix_branch,
+                "base": head_ref,
+                "body": pr_body,
+            },
+        )
+        fix_pr_url = new_pr.get("html_url", "(url unavailable)")
+        fix_pr_number = new_pr.get("number", "")
+        comment(
+            f"🤖 **ModelOps Bot** opened fix PR #{fix_pr_number} with proposed fixes: "
+            f"{fix_pr_url}\n\nFiles: `{files}`.\n\n"
+            "Review and merge the fix PR into this branch to re-trigger review and CI."
+        )
+    except Exception as e:  # noqa: BLE001 — PR creation is best-effort
+        # The branch + commit are already pushed — at least tell the user.
+        comment(
+            f"🤖 **ModelOps Bot** pushed fixes to branch `{fix_branch}` but could not open "
+            f"a PR automatically ({type(e).__name__}: {str(e)[:200]}). "
+            "You can open the PR manually."
+        )
 
 
 if __name__ == "__main__":
@@ -244,7 +315,7 @@ if __name__ == "__main__":
         print(f"fix degraded: {type(e).__name__}: {e}")
         with contextlib.suppress(Exception):
             comment(
-                "🤖 **ModelOps Bot**: no se pudo completar el autofix (ver logs); "
-                "el PR no se bloquea."
+                "🤖 **ModelOps Bot**: could not complete autofix (see logs); "
+                "the PR is not blocked."
             )
     sys.exit(0)

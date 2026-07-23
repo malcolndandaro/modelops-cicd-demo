@@ -227,7 +227,7 @@ def test_to_check_run_caps_at_50_with_overflow_note():
     findings = [_valid(severity="STYLE", file=f"f{i}.py", line=i + 1) for i in range(60)]
     cr = review_core.to_check_run(findings, review_core.decide_gate(findings))
     assert len(cr["output"]["annotations"]) == 50
-    assert "no anotados" in cr["output"]["summary"]
+    assert "not annotated" in cr["output"]["summary"]
 
 
 # --- fix mode (slice 06) ---------------------------------------------------------
@@ -238,6 +238,9 @@ def test_is_authorized_matrix():
     assert review_core.is_authorized("read", False)[0] is False  # insufficient permission
     assert review_core.is_authorized("triage", False)[0] is False
     assert review_core.is_authorized("write", True)[0] is False  # protected branch
+    # Reason strings are in English
+    assert "protected" in review_core.is_authorized("write", True)[1]
+    assert "write/maintain/admin" in review_core.is_authorized("read", False)[1]
 
 
 def test_extract_code_from_fence():
@@ -275,8 +278,8 @@ def test_validate_content_empty_and_sql():
 
 def test_build_fix_prompt_includes_findings_and_full_file_ask():
     sys_p, user_p = review_core.build_fix_prompt("x.py", "old = 1\n", [_valid(message="m1")])
-    assert "MODO ARREGLO" in sys_p
-    assert "x.py" in user_p and "ENV-01" in user_p and "COMPLETO" in user_p
+    assert "FIX MODE" in sys_p
+    assert "x.py" in user_p and "ENV-01" in user_p and "COMPLETE" in user_p
 
 
 def test_build_fix_prompt_includes_handbook_rules():
@@ -284,16 +287,16 @@ def test_build_fix_prompt_includes_handbook_rules():
         {
             "rule_id": "ENV-01",
             "citation": "Handbook > Catalog-per-Env",
-            "content": "Sin refs cross-env",
+            "content": "No cross-env refs",
         }
     ]
     _, user_p = review_core.build_fix_prompt("x.py", "old = 1\n", [_valid()], rules)
-    assert "HANDBOOK" in user_p and "ENV-01" in user_p and "Sin refs cross-env" in user_p
+    assert "HANDBOOK" in user_p and "ENV-01" in user_p and "No cross-env refs" in user_p
 
 
 def test_build_fix_retry_prompt_includes_lint_errors():
     sys_p, user_p = review_core.build_fix_retry_prompt("x.py", "import os, sys\n", "E401 imports")
-    assert "REINTENTO" in sys_p
+    assert "RETRY" in sys_p
     assert "x.py" in user_p and "E401" in user_p
     assert "import os, sys" in user_p
 

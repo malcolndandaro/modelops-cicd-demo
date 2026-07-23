@@ -7,5 +7,6 @@ from pyspark.sql import functions as F
 
 def adjust_prices(df, pct=0.05):
     baseline = df.select("base_price").collect()[0][0]  # driver action — TP-02
-    prod = spark.table("malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing")  # cross-env prod ref from dev — ENV-01
+    # cross-env prod ref from a dev job — ENV-01
+    prod = spark.table("malcoln_aws_stable_catalog.agentic2_mlops_prod.gold_pricing")
     return df.withColumn("adjusted", F.lit(baseline * (1 + pct))).join(prod, "sku")

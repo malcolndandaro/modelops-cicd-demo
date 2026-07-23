@@ -60,6 +60,25 @@ def load_config() -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def _ensure_experiment_parent(experiment_name: str) -> None:
+    """Create the experiment's parent workspace folder if it doesn't exist.
+
+    `mlflow.set_experiment("/ModelOps/...")` fails with NOT_FOUND if the parent
+    directory `/ModelOps` doesn't exist — set_experiment does not create intermediate
+    workspace folders. Idempotent: mkdirs is a no-op if the folder already exists.
+    Best-effort — if the SDK isn't available or the call fails, let set_experiment surface.
+    """
+    parent = experiment_name.rsplit("/", 1)[0]
+    if not parent or "/" not in experiment_name:
+        return
+    try:
+        from databricks.sdk import WorkspaceClient
+
+        WorkspaceClient().workspace.mkdirs(parent)
+    except Exception as e:  # noqa: BLE001 — best-effort; set_experiment will report if it matters
+        print(f"could not pre-create experiment parent {parent}: {type(e).__name__}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Synthetic data generation — deterministic, self-contained
 # ---------------------------------------------------------------------------
@@ -134,6 +153,7 @@ def train(config: dict[str, Any]) -> str:
     experiment_name = os.environ.get(
         "MLFLOW_EXPERIMENT_NAME", "/ModelOps/demand_forecaster_training"
     )
+    _ensure_experiment_parent(experiment_name)
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run(run_name="demand_forecaster_train") as run:

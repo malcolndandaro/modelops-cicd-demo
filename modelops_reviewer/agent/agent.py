@@ -1,12 +1,13 @@
 """ModelOps Reviewer — slice 04: real, retrieval-grounded, cited findings.
 
 Imperative shell around the pure cores in review_core.py:
-  diff → build_review_context → retrieve handbook rules (Vector Search) →
+  diff → build_review_context → query Knowledge Assistant (grounding) →
   build_review_prompt → call the foundation model → parse_findings → return.
 
 Output is the Finding contract as JSON (the CI shell, review_pr.py, renders it).
-Retrieval cites the exact handbook rule_id/citation, closing the "same knowledge
-base powers Q&A and review" loop.
+Grounding is provided by the modelops-handbook-ka Knowledge Assistant, which cites
+the exact handbook passages and closes the "same knowledge base powers Q&A and
+review" loop.
 """
 
 from __future__ import annotations
@@ -21,9 +22,7 @@ from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import ResponsesAgentRequest, ResponsesAgentResponse
 
 LLM_ENDPOINT = "databricks-glm-5-2"
-VS_INDEX = "malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_handbook_rules_idx"
-VS_COLUMNS = ["rule_id", "title", "content", "citation", "severity_hint"]
-N_RULES = 8
+KA_ENDPOINT = "modelops-handbook-ka"
 
 
 def _input_text(req: ResponsesAgentRequest) -> str:
@@ -40,18 +39,38 @@ def _input_text(req: ResponsesAgentRequest) -> str:
     return "\n".join(parts)
 
 
-def _retrieve_rules(query_text: str) -> list[dict]:
-    """Query the handbook Vector Search index for diff-relevant rules."""
-    w = WorkspaceClient()
-    res = w.vector_search_indexes.query_index(
-        index_name=VS_INDEX,
-        columns=VS_COLUMNS,
-        query_text=query_text[:2000] or "coding standards",
-        num_results=N_RULES,
-    )
-    rows = (res.result.data_array if res.result else None) or []
-    # trailing score column is intentionally dropped (5 cols vs 6-element row)
-    return [dict(zip(VS_COLUMNS, row, strict=False)) for row in rows]
+def _query_ka(query_text: str) -> str | None:
+    """Query the modelops-handbook-ka Knowledge Assistant for grounding context.
+
+    Returns the cited answer text, or None if the call fails. Retrieval is
+    BEST-EFFORT — a failure here must not prevent the review from running.
+    """
+    try:
+        w = WorkspaceClient()
+        resp = w.api_client.do(
+            "POST",
+            f"/serving-endpoints/{KA_ENDPOINT}/invocations",
+            body={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Which ModelOps Handbook rules does this code diff violate? "
+                            f"{query_text[:1500]}"
+                        ),
+                    }
+                ]
+            },
+        )
+        # KA returns a chat-completion style response with cited answer text.
+        for choice in (resp.get("choices") or []):
+            msg = (choice.get("message") or {})
+            text = msg.get("content", "")
+            if text.strip():
+                return text.strip()
+    except Exception as e:  # noqa: BLE001 — retrieval is best-effort
+        print(f"KA grounding degraded: {type(e).__name__}: {e}")
+    return None
 
 
 def _call_llm(system: str, user: str) -> str:
@@ -75,11 +94,12 @@ class ModelopsReviewer(ResponsesAgent):
     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
         diff = _input_text(request)
         context = review_core.build_review_context(diff)
-        # Query text = the added code itself, so the embedding matches rules whose
-        # content mentions bimbo_prd / .collect() / sys.argv / SQL style, etc.
+        # Query text = the added code itself, so the KA finds rules whose content
+        # mentions cross-env refs, .collect(), sys.argv, SQL style, etc.
         query_text = "\n".join(code for f in context["files"] for _, code in f.get("added", []))
-        rules = _retrieve_rules(query_text)
-        system, user = review_core.build_review_prompt(context, rules)
+        grounding_text = _query_ka(query_text or "coding standards")
+        # Pass empty rules list — the KA grounding_text carries the handbook context.
+        system, user = review_core.build_review_prompt(context, [], grounding_text=grounding_text)
         raw = _call_llm(system, user)
         payload = review_core.parse_review(raw)  # tolerant: recovers summary + findings together
         return ResponsesAgentResponse(

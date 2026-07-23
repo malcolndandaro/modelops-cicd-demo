@@ -1,9 +1,9 @@
 """Build the ModelOps Handbook rules table + Vector Search index (slice 02).
 
 Parses the structured `### [RULE-ID]` rule blocks out of ../modelops_handbook/*.md,
-writes one row per rule to a UC volume as JSONL, materializes
-`malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_handbook_rules` (Change Data Feed on), and creates/syncs the
-Delta Sync index `malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_handbook_rules_idx` on the `modelops-vs`
+writes one row per rule to a UC volume as JSONL, materializes the UC table
+`...agentic2_mlops_dev.modelops_handbook_rules` (Change Data Feed on), and creates/syncs
+the Delta Sync index `...modelops_handbook_rules_idx` on the `modelops-vs`
 endpoint with managed `databricks-gte-large-en` embeddings.
 
 Run:  DATABRICKS_AUTH_STORAGE=plaintext python modelops_reviewer/index/build_handbook_index.py

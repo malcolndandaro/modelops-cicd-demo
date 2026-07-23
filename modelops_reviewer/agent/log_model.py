@@ -1,8 +1,8 @@
 """Log + register the ModelOps Reviewer (tracer) to Unity Catalog.
 
 Run:  DATABRICKS_AUTH_STORAGE=plaintext python modelops_reviewer/agent/log_model.py
-Registers `malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer` and moves the @prod alias to the new
-version. Validates the model loads + predicts locally before it's deployed.
+Registers the UC model `...agentic2_mlops_dev.modelops_reviewer` and moves the @prod
+alias to the new version. Validates the model loads + predicts locally before deploy.
 """
 
 from __future__ import annotations
@@ -10,10 +10,7 @@ from __future__ import annotations
 import pathlib
 
 import mlflow
-from mlflow.models.resources import (
-    DatabricksServingEndpoint,
-    DatabricksVectorSearchIndex,
-)
+from mlflow.models.resources import DatabricksServingEndpoint
 from mlflow.tracking import MlflowClient
 
 FULL_NAME = "malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer"
@@ -21,7 +18,7 @@ EXPERIMENT = "/Users/malcoln.dandaro@databricks.com/modelops_reviewer/experiment
 AGENT_FILE = str(pathlib.Path(__file__).with_name("agent.py"))
 CORE_FILE = str(pathlib.Path(__file__).with_name("review_core.py"))
 LLM_ENDPOINT = "databricks-glm-5-2"
-VS_INDEX = "malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_handbook_rules_idx"
+KA_ENDPOINT = "modelops-handbook-ka"
 
 mlflow.set_tracking_uri("databricks")  # log to the workspace, not local ./mlruns
 mlflow.set_registry_uri("databricks-uc")
@@ -44,9 +41,9 @@ with mlflow.start_run(run_name="grounded"):
         code_paths=[CORE_FILE],  # pure cores travel with the model
         input_example=_EXAMPLE,
         pip_requirements=["mlflow==3.12.0", "databricks-sdk", "pydantic>=2"],
-        resources=[  # passthrough auth for the deployed endpoint — DO NOT skip
+        resources=[  # passthrough auth for the deployed endpoints — DO NOT skip
             DatabricksServingEndpoint(endpoint_name=LLM_ENDPOINT),
-            DatabricksVectorSearchIndex(index_name=VS_INDEX),
+            DatabricksServingEndpoint(endpoint_name=KA_ENDPOINT),
         ],
         registered_model_name=FULL_NAME,
     )

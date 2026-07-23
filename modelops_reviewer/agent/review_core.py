@@ -209,7 +209,7 @@ def _first_balanced_object(s: str) -> str | None:
 
 def loads_tolerant(raw: object) -> object | None:
     """Best-effort JSON decode. Returns the parsed value, or None on failure."""
-    if isinstance(raw, (dict, list)):
+    if isinstance(raw, dict | list):
         return raw
     if not isinstance(raw, str):
         return None
@@ -367,9 +367,9 @@ def is_authorized(permission: str, branch_is_protected: bool) -> tuple[bool, str
     and never on a protected branch. `permission` is the GitHub collaborator role.
     """
     if branch_is_protected:
-        return False, "The target branch is protected; the bot does not write to protected branches."
+        return False, "The target branch is protected; the bot does not write to protected branches."  # noqa: E501
     if permission not in _WRITE_PERMS:
-        return False, f"Insufficient permission ('{permission}'); write/maintain/admin is required."
+        return False, f"Insufficient permission ('{permission}'); write/maintain/admin is required."  # noqa: E501
     return True, ""
 
 

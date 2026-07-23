@@ -95,6 +95,23 @@ def _load_ml_rules() -> str:
     return promotion_core.DEFAULT_ML_RULES
 
 
+def _ensure_experiment_parent(experiment_name: str) -> None:
+    """Create the experiment's parent workspace folder if it doesn't exist.
+
+    `mlflow.set_experiment("/ModelOps/...")` fails with NOT_FOUND if the parent directory
+    doesn't exist. Idempotent (mkdirs is a no-op if present); best-effort.
+    """
+    parent = experiment_name.rsplit("/", 1)[0]
+    if not parent or "/" not in experiment_name:
+        return
+    try:
+        from databricks.sdk import WorkspaceClient
+
+        WorkspaceClient().workspace.mkdirs(parent)
+    except Exception as e:  # noqa: BLE001 — best-effort; set_experiment will report if it matters
+        print(f"could not pre-create experiment parent {parent}: {type(e).__name__}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Metric retrieval helpers
 # ---------------------------------------------------------------------------
@@ -192,6 +209,7 @@ def run_gate() -> None:
     experiment_name = os.environ.get(
         "MLFLOW_EXPERIMENT_NAME", "/ModelOps/demand_forecaster_training"
     )
+    _ensure_experiment_parent(experiment_name)
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run(run_name="promotion_gate") as run:
