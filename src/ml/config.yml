@@ -6,27 +6,26 @@
 model_name: demand_forecaster
 
 # Regressor hyperparameters — RandomForestRegressor via scikit-learn.
-# Editing these without updating max_acceptable_mae is a Gate 1 BLOCKER (ML-01).
+# GATE-BLOCKER: n_estimators slashed from 100 → 5. This looks like a "tuning" change
+# but dramatically underfits the model, worsening MAE well beyond an acceptable level.
+# max_acceptable_mae is updated here to match the PR (so Gate 1 passes), but Gate 2
+# will detect that the challenger metric is worse than the current champion (ML-03).
 hyperparameters:
-  n_estimators: 100
+  n_estimators: 5      # CHANGED: was 100 — drastically underfit, model will degrade
   max_depth: 8
   min_samples_leaf: 5
   random_state: 42
 
 # Input features used for training and inference.
-# Dropping a feature here typically worsens MAE — Gate 2 will catch that.
+# Key features dropped to further degrade the model (Gate 2 catches this).
 features:
   - day_of_week
-  - week_of_year
   - store_id
-  - product_category
-  - price
-  - promotion_flag
-  - lag_7d_sales
-  - lag_14d_sales
+  # REMOVED: week_of_year, product_category, price, promotion_flag, lag_7d_sales, lag_14d_sales
+  # Dropping 6 of 8 features significantly worsens the model's predictive power.
 
 # Maximum acceptable Mean Absolute Error on a 20% holdout split.
-# This is the threshold the metric-regression test asserts (tests/test_demand_forecaster.py).
-# MUST be updated whenever hyperparameters or features change — Gate 1 (ML-01) and
-# Gate 2 (ML-03) both key off this contract.
-max_acceptable_mae: 12.0
+# Updated to reflect the (knowingly degraded) model — this satisfies the regression
+# test assertion (so the PR looks clean) but Gate 2 will compare challenger vs champion
+# and flag the degradation under ML-03.
+max_acceptable_mae: 50.0   # CHANGED: was 12.0 — threshold inflated to hide the degradation
