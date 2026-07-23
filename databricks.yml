@@ -16,7 +16,7 @@ variables:
       production-mode targets (qa/prd). The CI SP is NOT a workspace admin, so it can only set
       run_as to ITSELF. Provisioning fills this in once the SP is created. Kept non-empty to
       avoid an empty-var Terraform null-list panic.
-    default: "TODO_CI_SP_CLIENT_ID"
+    default: "a66e1537-4dc5-4115-a50c-1e5d4143c688"
   agent_model_version:
     description: >-
       UC model version of malcoln_aws_stable_catalog.agentic2_mlops_dev.modelops_reviewer to

@@ -1,0 +1,66 @@
+resources:
+  jobs:
+    model_training_job:
+      name: "[${bundle.target}] ModelOps — demand_forecaster training + promotion"
+      # Gate 2: trains a challenger model, registers it to Unity Catalog under @challenger,
+      # runs the AI promotion gate (LLM compares challenger vs champion metrics), and
+      # on APPROVE moves @champion to the challenger version.
+      #
+      # Task flow:  train  -->  register  -->  promotion_gate  -->  promote
+      #                                              |
+      #                                         exit 1 = BLOCK
+      #                                       (promote never runs)
+      #
+      # @champion / @challenger are UC aliases — NOT deprecated workspace-registry
+      # Staging/Production stages.  See src/ml/promote.py for the alias contract.
+      tags:
+        project: modelops-gate2
+        environment: ${bundle.target}
+      tasks:
+        - task_key: train
+          spark_python_task:
+            python_file: ../../src/ml/train.py
+          environment_key: ml_env
+
+        - task_key: register
+          depends_on:
+            - task_key: train
+          spark_python_task:
+            python_file: ../../src/ml/register.py
+          environment_key: ml_env
+
+        - task_key: promotion_gate
+          depends_on:
+            - task_key: register
+          spark_python_task:
+            python_file: ../../src/ml/promotion_gate.py
+          environment_key: ml_env
+
+        - task_key: promote
+          depends_on:
+            - task_key: promotion_gate
+          # 'promote' only runs if promotion_gate exits 0 (APPROVE).
+          # If promotion_gate exits 1 (BLOCK), the job fails at that task and
+          # 'promote' is skipped automatically by Databricks Jobs (the task
+          # is in the dependency chain of a failed task, so it does not run).
+          spark_python_task:
+            python_file: ../../src/ml/promote.py
+          environment_key: ml_env
+
+      environments:
+        - environment_key: ml_env
+          spec:
+            client: "2"
+            dependencies:
+              - mlflow==3.12.0
+              - databricks-sdk
+              - scikit-learn>=1.3
+              - pyyaml
+
+      parameters:
+        - name: MLFLOW_CATALOG
+          default: ${var.catalog}
+        - name: MLFLOW_SCHEMA
+          default: ${var.schema}
+        - name: MLFLOW_EXPERIMENT_NAME
+          default: "/ModelOps/demand_forecaster_training"

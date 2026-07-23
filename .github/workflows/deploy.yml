@@ -42,10 +42,29 @@ jobs:
       - name: Deploy bundle to shared dev
         run: databricks bundle deploy -t dev
 
+  train-and-promote-dev:
+    name: Train + Gate 2 promotion (dev)
+    # Gate 2: trains a challenger model, runs the AI promotion gate, and on APPROVE
+    # moves @champion to the challenger version in the dev schema.
+    # Runs after deploy-dev so the job definition is fresh before triggering it.
+    runs-on: self-hosted
+    needs: deploy-dev
+    if: vars.DATABRICKS_HOST != ''
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_AUTH_TYPE: oauth-m2m
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_SP_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Run model_training_job (train → register → gate → promote)
+        run: databricks bundle run model_training_job -t dev
+
   deploy-qa:
     name: Promote to qa (manual approval)
     runs-on: self-hosted
-    needs: deploy-dev
+    needs: train-and-promote-dev
     if: vars.DATABRICKS_HOST != ''
     environment: qa   # required-reviewer gate — pauses for human approval
     env:
