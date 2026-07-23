@@ -91,11 +91,12 @@ def retrieve_rules(query_text: str) -> list[dict]:
         from databricks.sdk import WorkspaceClient  # lazy
 
         w = WorkspaceClient()
+        # KA endpoint uses the Responses API: `input`, NOT `messages`.
         resp = w.api_client.do(
             "POST",
             f"/serving-endpoints/{ka_endpoint}/invocations",
             body={
-                "messages": [
+                "input": [
                     {
                         "role": "user",
                         "content": (
@@ -107,11 +108,18 @@ def retrieve_rules(query_text: str) -> list[dict]:
             },
         )
         # KA returns cited answer text — wrap as a single synthetic rule so
-        # build_fix_prompt can include it as grounding context.
+        # build_fix_prompt can include it as grounding context. The KA speaks the
+        # Responses API (output[].content[].text); tolerate chat-completions too.
         ka_text = ""
-        for choice in (resp.get("choices") or []):
-            msg = (choice.get("message") or {})
-            ka_text += msg.get("content", "")
+        for item in (resp.get("output") or []):
+            for c in (item.get("content") or []):
+                if isinstance(c, dict) and c.get("text"):
+                    ka_text += c["text"]
+                elif isinstance(c, str):
+                    ka_text += c
+        if not ka_text:
+            for choice in (resp.get("choices") or []):
+                ka_text += (choice.get("message") or {}).get("content", "")
         if ka_text.strip():
             return [
                 {

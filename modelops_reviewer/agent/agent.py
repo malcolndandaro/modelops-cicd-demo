@@ -43,6 +43,27 @@ def _input_text(req: ResponsesAgentRequest) -> str:
     return "\n".join(parts)
 
 
+def _ka_answer_text(resp: dict) -> str:
+    """Extract answer text from a KA response. The Agent Bricks KA endpoint speaks the
+    Responses API (output[].content[].text). Also tolerate a chat-completions shape
+    (choices[].message.content) so the reviewer survives an endpoint format change."""
+    parts: list[str] = []
+    # Responses API shape
+    for item in resp.get("output") or []:
+        for c in item.get("content") or []:
+            if isinstance(c, dict) and c.get("text"):
+                parts.append(c["text"])
+            elif isinstance(c, str):
+                parts.append(c)
+    # Chat-completions fallback
+    if not parts:
+        for choice in resp.get("choices") or []:
+            content = (choice.get("message") or {}).get("content", "")
+            if content:
+                parts.append(content)
+    return "\n".join(parts).strip()
+
+
 def _query_ka(query_text: str) -> str | None:
     """Query the modelops-handbook-ka Knowledge Assistant for grounding context.
 
@@ -51,27 +72,25 @@ def _query_ka(query_text: str) -> str | None:
     """
     try:
         w = WorkspaceClient()
+        # KA endpoint uses the Responses API: `input`, NOT `messages`.
         resp = w.api_client.do(
             "POST",
             f"/serving-endpoints/{KA_ENDPOINT}/invocations",
             body={
-                "messages": [
+                "input": [
                     {
                         "role": "user",
                         "content": (
                             "Which ModelOps Handbook rules does this code diff violate? "
+                            "Name each rule id and quote its citation. "
                             f"{query_text[:1500]}"
                         ),
                     }
                 ]
             },
         )
-        # KA returns a chat-completion style response with cited answer text.
-        for choice in (resp.get("choices") or []):
-            msg = (choice.get("message") or {})
-            text = msg.get("content", "")
-            if text.strip():
-                return text.strip()
+        text = _ka_answer_text(resp) if isinstance(resp, dict) else ""
+        return text or None
     except Exception as e:  # noqa: BLE001 — retrieval is best-effort
         print(f"KA grounding degraded: {type(e).__name__}: {e}")
     return None
