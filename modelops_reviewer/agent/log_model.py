@@ -24,6 +24,17 @@ KA_ENDPOINT = os.environ.get("KA_ENDPOINT", "ka-5f315d3c-endpoint")
 
 mlflow.set_tracking_uri("databricks")  # log to the workspace, not local ./mlruns
 mlflow.set_registry_uri("databricks-uc")
+
+# set_experiment fails NOT_FOUND if the parent workspace folder doesn't exist — it does
+# not create intermediate dirs. Pre-create it (idempotent, best-effort) so a fresh
+# workspace / demo reset doesn't break registration.
+try:
+    from databricks.sdk import WorkspaceClient
+
+    WorkspaceClient().workspace.mkdirs(EXPERIMENT.rsplit("/", 1)[0])
+except Exception as _e:  # noqa: BLE001 — best-effort; set_experiment will report if it matters
+    print(f"(experiment parent pre-create skipped: {type(_e).__name__}: {_e})")
+
 mlflow.set_experiment(EXPERIMENT)
 
 # A tiny diff so the input-example validation exercises the real path (retrieval + LLM).
