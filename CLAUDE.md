@@ -323,6 +323,25 @@ serverless task execution differs from local Python in ways that bite silently.*
     `/Users/malcoln.dandaro/Documents/Work/Projects/actions-runner` (its registered name has a
     typo, `modeols-cicd-demo`, but it works).
 
+### E. Per-environment training (each env trains its own model)
+23. **Job `parameters:` are NOT env vars for a `spark_python_task`.** register/gate/promote
+    read catalog/schema; job-level `parameters:` (name/default) never reach `os.environ`, so
+    they silently fell back to the dev default and qa/prd trained into `agentic2_mlops_dev`.
+    Fix: pass `--catalog ${var.catalog} --schema ${var.schema}` as `spark_python_task.parameters`
+    (argv), resolved argv→env→default by `src/ml/_config.py`. ⚠️ importing that sibling via
+    module-level `pathlib.Path(__file__)` re-triggers the `__file__` NameError on serverless —
+    guard it with a cwd/`databricks.yml` walk-up. And `register.py`'s `--run-id` parse must
+    match the flag by NAME (argv now carries `--catalog/--schema` too), not by fixed position.
+24. **GLM-5-2 truncation → spurious BLOCK.** The gate's decision JSON was cut off at
+    `max_tokens=1200` mid-object → unparseable → `parse_decision` defaulted to a "failed to
+    parse" BLOCK that buried the real ML-03 reasoning. Fix: `max_tokens=20000` +
+    `_repair_truncated_json` (brute-force close-and-parse) so a truncated response still
+    recovers the decision + complete findings.
+25. **Cross-env deploy as a human fails on `run_as` binding.** `databricks bundle deploy -t qa`
+    (or `-t prd`) run locally as Malcoln errors: the SP `run_as` needs the caller to hold
+    `servicePrincipal.user` on the SP. So qa/prd deploys only work IN CI (the deploy runs AS
+    the SP → `run_as`=self). Test qa/prd via CI, not local.
+
 ## Pointers
 
 - `DEMO.md` — live demo runbook in PT-BR (step-by-step, timings, plan B per failure).
