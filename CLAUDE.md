@@ -6,6 +6,25 @@
 >
 > Orientation for any engineer or agent opening this repo. Read this first, then `DEMO.md`.
 
+> **STATUS (verified end-to-end 2026-07-23): DEMO-READY. ✅**
+> Both AI gates, the deploy cascade, the reset loop, and `/modelops-fix` were all run
+> **live** on this workspace + the self-hosted runner (not just locally):
+> - **Gate 1** — on the review-blocker PR: Ruff / sqlfluff / bundle-validate / integration
+>   tests all GREEN; only the `ModelOps Reviewer` Check Run is RED, with handbook-cited
+>   **ENV-01 + ML-01 BLOCKERs**.
+> - **`/modelops-fix`** — the GitHub App bot opens a fix PR against the PR branch and
+>   correctly rewrites the ENV-01 line to `${var.catalog}.${var.schema}.gold_pricing`.
+> - **Gate 2** — full `train → register → promotion_gate → promote` green in CI as the SP;
+>   full deploy cascade `dev → qa → prod` green (both env gates approved).
+> - **Reset** — `reset_demo.sh --open-prs` is idempotent; leaves exactly 2 demo PRs, model
+>   v1 `@champion` / no `@challenger`, seeds + grants self-healed.
+> The **"Hard-won operational insights"** section below is the single most important read —
+> ~20 real failures had to be fixed to get here, almost all invisible until the code ran as
+> the **CI service principal** on the **serverless** job / **self-hosted** runner.
+>
+> **Left for the human:** rotate the GitHub App client secret if it was ever shared in
+> plaintext; before presenting, run `bash scripts/reset_demo.sh --open-prs` for a clean slate.
+
 ## What this repo is
 
 **ModelOps CI/CD Demo** — an end-to-end CI/CD pipeline for ML assets on Databricks,
@@ -176,22 +195,123 @@ update. Never set `agent_model_version` to `""` (empty string panics the TF prov
 
 ## Live assets (verified 2026-07-23 — both gates tested live)
 
-- **Serving endpoint `modelops-reviewer`** — `READY`, UC model v4 `@prod`, FM
-  `databricks-glm-5-2`. Smoke-tested: hero diff → BLOCKER ENV-01 + SUGGESTION ENV-02,
-  handbook-cited. Serving identity authenticates to the FM as the CI SP (see FM auth above).
-- **Knowledge Assistant** — display `modelops-handbook-ka`, serving endpoint
+- **Serving endpoint `modelops-reviewer`** — `READY`, UC model `@prod` (currently v4), FM
+  `databricks-glm-5-2`. Live-tested end-to-end: hero diff → cited BLOCKER findings. The
+  served agent calls the FM as the CI SP via env-injected creds (see FM-auth insight below).
+- **Knowledge Assistant** — display name `modelops-handbook-ka`, serving endpoint
   `ka-5f315d3c-endpoint` (`READY`), grounded on `handbook_volume`. Verified: ENV-01 query
-  returns the rule text + a `url_citation`.
-- **UC model** `...agentic2_mlops_dev.demand_forecaster` — `@champion` → v1, no
-  `@challenger` (clean reset baseline). Bootstrap train→register→gate→promote ran green.
-- **Seed tables** `...agentic2_mlops_dev.fact_sales` + `dim_store`.
-- **CI SP grants:** `sp-modelops-ci` has `USE_CATALOG` + schema grants on all three schemas,
-  plus `EXECUTE` on `system.ai.databricks-glm-5-2`. OAuth M2M auth verified.
-- **GitHub:** repo public; secrets/vars set; Environments `qa`/`prod` with required reviewer;
-  fix-bot GitHub App installed (contents/PR/issues write).
+  returns the rule text + a `url_citation`. Speaks the **Responses API** (`input[]`).
+- **UC model** `...agentic2_mlops_dev.demand_forecaster` — **`@champion` → v1**, no
+  `@challenger` (clean reset baseline). Owned by the **CI SP** (so it can create versions).
+  Full train→register→gate→promote verified green in CI as the SP.
+- **Seed tables** `fact_sales` + `dim_store` present in **all three** schemas
+  (dev/staging/prod). `data/seed_retail.py` regenerates them; `reset_demo.sh` self-heals.
+- **CI SP `sp-modelops-ci` grants (all required — see insights):** `USE_CATALOG` + per-schema
+  grants on the three schemas; `EXECUTE` on `system.ai.databricks-glm-5-2` (+ `USE_CATALOG`
+  on `system`, `USE_SCHEMA` on `system.ai`); `CAN_MANAGE` on the `/ModelOps` experiment +
+  folder; **owner** of the `demand_forecaster` model; **`CAN_QUERY`** on BOTH the
+  `modelops-reviewer` and `ka-5f315d3c-endpoint` serving endpoints.
+- **GitHub:** repo public; secrets `DATABRICKS_CLIENT_SECRET` + `MODELOPS_BOT_APP_PRIVATE_KEY`;
+  vars `DATABRICKS_HOST` / `DATABRICKS_SP_CLIENT_ID` / `MODELOPS_BOT_APP_ID`; Environments
+  `qa`/`prod` with `malcolndandaro` as required reviewer; fix-bot GitHub App installed
+  (contents/PR/issues write); "Allow Actions to create and approve PRs" enabled.
+
+## Hard-won operational insights (what made the demo actually work)
+
+Read this before touching the pipeline. Nearly every item was **invisible in local dev /
+`bundle validate` / unit tests** and only surfaced when the code ran as the **CI service
+principal** on the **serverless** training job or the **self-hosted** runner. The meta-lesson:
+*when a job runs as the SP, every asset it touches must be SP-owned or SP-granted, and
+serverless task execution differs from local Python in ways that bite silently.*
+
+### A. Serverless `spark_python_task` execution traps
+1. **`__file__` is undefined.** Databricks runs the task via `exec(compile(...))`, so
+   module-level `pathlib.Path(__file__)` raises `NameError`. Use a `_repo_root()` helper that
+   tries `__file__`, else walks up from `cwd()` for the `databricks.yml` marker.
+2. **`sys.exit()` = task FAILURE.** The notebook wrapper reports ANY `SystemExit` (even code
+   0/None) as a failed task. So `sys.exit(main())` failed a task that actually succeeded, and
+   `sys.exit(0)` on gate APPROVE would wrongly fail the gate. Rule: **call `main()` directly**;
+   for the promotion gate, APPROVE = `return`, BLOCK = `raise`.
+3. **`/tmp` is read-only and not shared across tasks.** train→register handoff via a `/tmp`
+   file crashed; made it best-effort and resolve the run authoritatively via MLflow
+   (experiment + `tags.model_name`).
+4. **`mlflow.set_experiment("/ModelOps/...")` → NOT_FOUND** if the parent workspace folder
+   doesn't exist (it doesn't auto-create). Pre-create with `WorkspaceClient().workspace.mkdirs(parent)`.
+
+### B. Foundation Model auth (this account has the **FM Unity Catalog permissions** feature ON)
+5. With that feature enabled, the default schema-wide `EXECUTE` on `system.ai` is revoked;
+   each principal needs **`EXECUTE` on the specific model** `system.ai.databricks-glm-5-2`
+   (+ `USE_CATALOG on system`, `USE_SCHEMA on system.ai`). Symptom: `403 PERMISSION_DENIED:
+   User is missing privileges: USE CATALOG on system`.
+6. **The served agent's OBO token is down-scoped** — it does NOT inherit the creator's grants,
+   so granting Malcoln wasn't enough. Fix: the deployed agent authenticates to the FM **as the
+   CI SP** (which holds the grant), with SP creds injected as served-entity env vars
+   (`MODELOPS_SP_CLIENT_ID` / `MODELOPS_SP_CLIENT_SECRET`) by `deploy_agent.py`.
+7. **`auth_type="oauth-m2m"` is REQUIRED** when building that SP client inside serving:
+   the injected OBO token (`DATABRICKS_TOKEN`) coexists with the SP creds, so without an
+   explicit auth_type the SDK errors ("more than one authorization method configured") or
+   silently uses the wrong one. `WorkspaceClient(host, client_id, client_secret, auth_type="oauth-m2m")`.
+8. **Call the FM via `WorkspaceClient().serving_endpoints.get_open_ai_client()`**, NOT
+   `mlflow.deployments.get_deploy_client().predict()` (which re-resolves through the `system`
+   catalog and 403s) and NOT `openai.OpenAI(api_key=cfg.token)` (under oauth-m2m `cfg.token`
+   is None → "Missing credentials"). `get_open_ai_client()` wraps dynamic OAuth token minting.
+9. **The CI SP needs `CAN_QUERY` on BOTH serving endpoints** (`modelops-reviewer` and the KA).
+   The review/fix CI jobs run as the SP and invoke them. ⚠️ The reviewer's **advisory-never-block**
+   design MASKS a missing grant: the `modelops-review` workflow shows SUCCESS while the reviewer
+   actually posted a "not available" fallback. **`modelops-review=success` does NOT prove Gate 1
+   works — always read the posted PR comment / Check Run conclusion.**
+10. **GLM-5-2 occasionally returns an EMPTY completion.** The gate's `parse_decision` then
+    can't parse and defaults to BLOCK — a spurious block. `_call_llm` retries empty responses 3×.
+    (The KA also returns an empty envelope via the CLI `serving-endpoints query`; the SDK path
+    returns the real `output[].content[].text` — always test via the SDK path the code uses.)
+
+### C. Service-principal ownership / permissions (job runs AS the SP)
+11. **Experiment folder:** if `/ModelOps` was first created by a human, the SP can't read it
+    (`does not have read permission for node /workspace/<id>`). Grant SP `CAN_MANAGE` on the
+    experiment + parent dir. `reset_demo.sh` step 2.5 self-heals this.
+12. **Model versions:** the SP couldn't add versions to a human-created model
+    (`does not have CREATE MODEL VERSION`). Fix: **transfer model ownership to the SP**
+    (`api patch /api/2.1/unity-catalog/models/<FQN> --json '{"owner":"<sp-app-id>"}'`). Owner
+    can create versions AND move aliases (register + promote).
+13. **DO NOT churn SP OAuth secrets.** They cap at 5 per SP; minting a new one + deleting old
+    ones invalidated the `DATABRICKS_CLIENT_SECRET` in GitHub → `deploy.yml` failed
+    `invalid_client`. Keep exactly ONE secret, shared by the GitHub secret AND the reviewer
+    endpoint env var. To test the SP identity, trigger the DEPLOYED CI job (uses GitHub's
+    secret), don't mint locally.
+
+### D. GitHub Actions / CI
+14. **Missing test deps.** The pre-merge integration venv (`pr-checks.yml`) needed
+    `mlflow`, `scikit-learn`, `numpy`, `pyyaml` added — `tests/test_demand_forecaster.py`
+    imports the training code. Missing → collection ImportError → the whole gate red.
+15. **Serverless job env** (`model_training_job.job.yml`) needs `databricks-sdk[openai]` —
+    the gate calls the FM via the serving OpenAI client.
+16. **Retail integration tests read real UC tables** (`fact_sales`/`dim_store`). If missing:
+    `TABLE_OR_VIEW_NOT_FOUND`. Seed all 3 schemas; `reset_demo.sh` step 2.6 self-heals.
+17. **`ruff format --check` is a separate gate** from `ruff check`. Code can pass `check` but
+    fail `format --check`. Run `ruff format src/` before pushing.
+18. **Demo fixtures must be lint-clean.** The review-blocker fixture had an unused `import os`
+    → Ruff F401 failed the deterministic gate, breaking the "only the reviewer blocks" story.
+    Bad-PR fixtures must pass linters and carry ONLY the semantic violation.
+19. **`/modelops-fix` PR creation needs the App token, not `GITHUB_TOKEN`.** The default
+    token can't open PRs unless "Allow Actions to create/approve PRs" is enabled (403). The
+    GitHub App identity isn't subject to that — `fix_pr.py` posts `/pulls` with `BOT_TOKEN`.
+    (The push already used the App token; only PR creation was on the wrong token.)
+20. **`issue_comment` workflows run the workflow file from the DEFAULT branch (main) but
+    execute the checked-out PR-head-branch code.** So a fix to `fix_pr.py` only takes effect
+    on PR branches recreated from the fixed main — recreate demo PRs (reset) after changing it.
+21. **The `demo` label must exist** or `gh pr create --label demo` fails and (if masked) drops
+    the PR silently. `reset_demo.sh` creates the label idempotently and surfaces create errors.
+22. **The self-hosted runner is single-threaded** — GitHub-side workflow steps queue and drain
+    serially (Databricks serverless jobs run off-runner and parallelize fine). Don't push a
+    burst of commits right before the demo. Runner dir:
+    `/Users/malcoln.dandaro/Documents/Work/Projects/actions-runner` (its registered name has a
+    typo, `modeols-cicd-demo`, but it works).
 
 ## Pointers
 
 - `DEMO.md` — live demo runbook in PT-BR (step-by-step, timings, plan B per failure).
+- `.scratch/modelops-cicd-demo/AFK-SESSION-REPORT.md` — chronological record of the
+  verification session (local, not committed).
 - `docs/ado-translation.md` — GitHub Actions → Azure DevOps parity.
-- `scripts/reset_demo.sh` — idempotent reset for all demo state.
+- `scripts/reset_demo.sh` — idempotent reset for all demo state (branches/PRs, model aliases,
+  experiment grants, seed tables, endpoint cleanup).
