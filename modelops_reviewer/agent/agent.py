@@ -18,7 +18,6 @@ import os
 import mlflow
 import review_core
 from databricks.sdk import WorkspaceClient
-from mlflow.deployments import get_deploy_client
 from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import ResponsesAgentRequest, ResponsesAgentResponse
 
@@ -97,20 +96,32 @@ def _query_ka(query_text: str) -> str | None:
 
 
 def _call_llm(system: str, user: str) -> str:
-    client = get_deploy_client("databricks")
-    resp = client.predict(
-        endpoint=LLM_ENDPOINT,
-        inputs={
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "max_tokens": 1800,
-            # NOTE: opus-4-8 rejects the `temperature` parameter (400 BAD_REQUEST) — it
-            # manages sampling internally. Do not re-add it for this model.
-        },
+    """Call the GLM-5-2 FM endpoint using the OpenAI client over /serving-endpoints.
+
+    This is the documented pattern for calling an FM from INSIDE a deployed agent: it
+    uses the Model-Serving-injected on-behalf-of token (DATABRICKS_TOKEN/HOST), which the
+    `resources=[DatabricksServingEndpoint(LLM_ENDPOINT)]` passthrough authorizes. The
+    older mlflow.deployments get_deploy_client path re-resolved through the `system`
+    catalog and 403'd ("USE CATALOG on system") for the serving identity.
+    """
+    from databricks.sdk import WorkspaceClient
+
+    # Use the SDK's OpenAI-compatible client: it resolves auth from the ambient context —
+    # the injected on-behalf-of token when running inside Model Serving, or the local
+    # profile (OAuth/PAT) during log_model validation. Avoids the static-api_key problem
+    # of constructing openai.OpenAI directly, and the `system` catalog 403 of the older
+    # mlflow.deployments path.
+    client = WorkspaceClient().serving_endpoints.get_open_ai_client()
+    resp = client.chat.completions.create(
+        model=LLM_ENDPOINT,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        max_tokens=1800,
+        temperature=0.0,
     )
-    return resp["choices"][0]["message"]["content"]
+    return resp.choices[0].message.content
 
 
 class ModelopsReviewer(ResponsesAgent):

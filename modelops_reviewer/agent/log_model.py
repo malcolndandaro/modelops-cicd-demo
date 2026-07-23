@@ -53,7 +53,7 @@ with mlflow.start_run(run_name="grounded"):
         python_model=AGENT_FILE,  # "models from code" — agent.py calls set_model()
         code_paths=[CORE_FILE],  # pure cores travel with the model
         input_example=_EXAMPLE,
-        pip_requirements=["mlflow==3.12.0", "databricks-sdk", "pydantic>=2"],
+        pip_requirements=["mlflow==3.12.0", "databricks-sdk", "openai", "pydantic>=2"],
         resources=[  # passthrough auth for the deployed endpoints — DO NOT skip
             DatabricksServingEndpoint(endpoint_name=LLM_ENDPOINT),
             DatabricksServingEndpoint(endpoint_name=KA_ENDPOINT),

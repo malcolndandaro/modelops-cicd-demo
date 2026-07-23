@@ -137,20 +137,25 @@ def retrieve_rules(query_text: str) -> list[dict]:
 
 
 def _fm_call(system: str, user: str) -> str | None:
-    from mlflow.deployments import get_deploy_client  # lazy
+    # Call GLM-5-2 via the OpenAI client over /serving-endpoints (consistent with the
+    # served agent). Runs on the CI runner authed as the CI SP (oauth-m2m env vars).
+    from databricks.sdk import WorkspaceClient  # lazy
+    from openai import OpenAI  # lazy
 
-    resp = get_deploy_client("databricks").predict(
-        endpoint=LLM_ENDPOINT,
-        inputs={
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "max_tokens": 4000,
-            # opus-4-8 rejects `temperature` (400) — manages sampling internally. Don't re-add.
-        },
+    cfg = WorkspaceClient().config
+    host = (os.environ.get("DATABRICKS_HOST") or cfg.host).rstrip("/")
+    token = os.environ.get("DATABRICKS_TOKEN") or cfg.token
+    client = OpenAI(api_key=token, base_url=f"{host}/serving-endpoints")
+    resp = client.chat.completions.create(
+        model=LLM_ENDPOINT,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        max_tokens=4000,
+        temperature=0.0,
     )
-    return review_core.extract_code(resp["choices"][0]["message"]["content"])
+    return review_core.extract_code(resp.choices[0].message.content)
 
 
 def fm_fix(path: str, original: str, findings: list[dict], rules: list[dict]) -> str | None:
