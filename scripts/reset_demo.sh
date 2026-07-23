@@ -58,29 +58,27 @@ else
     ok "  No open demo PRs to close"
 fi
 
-# Delete remote demo/* branches
-DEMO_BRANCHES=$(gh api "repos/${REPO}/git/refs" --jq '.[].ref | select(startswith("refs/heads/demo/"))' 2>/dev/null || true)
-if [ -n "$DEMO_BRANCHES" ]; then
-    for ref in $DEMO_BRANCHES; do
-        branch="${ref#refs/heads/}"
-        gh api --method DELETE "repos/${REPO}/git/refs/heads/${branch}" 2>/dev/null || true
-        ok "  Deleted remote branch: $branch"
-    done
-else
-    ok "  No remote demo/* branches to delete"
-fi
-
-# Delete remote modelops-fix/* branches
-FIX_BRANCHES=$(gh api "repos/${REPO}/git/refs" --jq '.[].ref | select(startswith("refs/heads/modelops-fix/"))' 2>/dev/null || true)
-if [ -n "$FIX_BRANCHES" ]; then
-    for ref in $FIX_BRANCHES; do
-        branch="${ref#refs/heads/}"
-        gh api --method DELETE "repos/${REPO}/git/refs/heads/${branch}" 2>/dev/null || true
-        ok "  Deleted remote branch: $branch"
-    done
-else
-    ok "  No remote modelops-fix/* branches to delete"
-fi
+# Delete remote demo/* and modelops-fix/* branches.
+# gh api on an EMPTY repo returns a 409 error object (not an array), so filter through
+# jq guarded by `if type=="array"` — otherwise the error JSON gets word-split into the loop.
+delete_branches_by_prefix() {
+    local prefix="$1"
+    local refs
+    refs=$(gh api "repos/${REPO}/git/refs" 2>/dev/null \
+        | jq -r "if type==\"array\" then .[].ref else empty end | select(startswith(\"refs/heads/${prefix}\"))" 2>/dev/null || true)
+    if [ -n "$refs" ]; then
+        while IFS= read -r ref; do
+            [ -z "$ref" ] && continue
+            local branch="${ref#refs/heads/}"
+            gh api --method DELETE "repos/${REPO}/git/refs/heads/${branch}" >/dev/null 2>&1 || true
+            ok "  Deleted remote branch: $branch"
+        done <<< "$refs"
+    else
+        ok "  No remote ${prefix}* branches to delete"
+    fi
+}
+delete_branches_by_prefix "demo/"
+delete_branches_by_prefix "modelops-fix/"
 
 # ---------------------------------------------------------------------------
 # 2. (--open-prs) Recreate scenario branches and open PRs
@@ -323,10 +321,15 @@ try:
     full_name = "${CATALOG}.${SCHEMA}.${MODEL}"
     try:
         versions = client.search_model_versions(f"name='{full_name}'")
-        print(f"  Model: {full_name}")
-        for v in sorted(versions, key=lambda x: int(x.version)):
-            aliases = v.aliases if hasattr(v, 'aliases') else []
-            print(f"  v{v.version} — aliases: {aliases if aliases else '(none)'}")
+        print(f"  Model: {full_name}  ({len(versions)} version(s))")
+        # Query the two demo aliases authoritatively (v.aliases from search is unreliable
+        # across mlflow versions — get_model_version_by_alias is the source of truth).
+        for alias in ("champion", "challenger"):
+            try:
+                mv = client.get_model_version_by_alias(full_name, alias)
+                print(f"  @{alias} -> v{mv.version}")
+            except Exception:
+                print(f"  @{alias} -> (none)")
     except Exception as e:
         print(f"  (model not found — will be created on first training run): {e}")
 except ImportError:
@@ -335,9 +338,11 @@ PYEOF
 
 echo ""
 echo "--- Key serving endpoints ---"
-DATABRICKS_CONFIG_PROFILE="$PROFILE" databricks serving-endpoints get modelops-reviewer 2>/dev/null \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'  modelops-reviewer: {d.get(\"state\",{}).get(\"ready\",\"?\")} ({d.get(\"state\",{}).get(\"config_update\",\"?\")})')" \
-    || echo "  modelops-reviewer: (not found or not accessible)"
+for EP in modelops-reviewer "${KA_ENDPOINT:-ka-5f315d3c-endpoint}"; do
+    DATABRICKS_CONFIG_PROFILE="$PROFILE" databricks serving-endpoints get "$EP" 2>/dev/null \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('state',{}); print(f'  {d.get(\"name\",\"$EP\")}: {s.get(\"ready\",\"?\")} ({s.get(\"config_update\",\"?\")})')" \
+        || echo "  $EP: (not found or not accessible)"
+done
 
 echo ""
 ok "Demo reset complete."

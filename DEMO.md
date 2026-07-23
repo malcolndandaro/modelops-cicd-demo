@@ -14,7 +14,7 @@
 
 > Todos os itens com **[PREP]** devem estar prontos antes de abrir a sala.
 
-- [ ] **[PREP] Runner self-hosted online.** GitHub → repo → Settings → Actions → Runners mostra o runner verde. Se estiver offline, iniciar com `./run.sh` em `~/Work/Projects/actions-runner`. **Todo job que toca o Databricks exige esse runner** (workspace VPN-only).
+- [ ] **[PREP] Runner self-hosted online.** GitHub → repo → Settings → Actions → Runners mostra o runner verde. Se estiver offline, iniciar com `./run.sh` em `/Users/malcoln.dandaro/Documents/Work/Projects/actions-runner`. **Todo job que toca o Databricks exige esse runner** (workspace VPN-only).
 - [ ] **[PREP] Endpoint `modelops-reviewer` PRONTO (READY, `scale_to_zero=false`).** Verificar:
   ```bash
   DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks serving-endpoints get modelops-reviewer
