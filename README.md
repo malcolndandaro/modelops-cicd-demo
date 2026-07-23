@@ -25,13 +25,12 @@ gates** protect every model promotion — one at PR time, one before merge.
 
 ## Architecture diagram
 
-Editable source: [`docs/architecture.drawio`](docs/architecture.drawio) (open with
-[diagrams.net](https://app.diagrams.net)). To refresh the rendered image, export the
-diagram as `docs/architecture.png` (File → Export as → PNG) — GitHub renders the PNG but
-not the raw `.drawio`.
+![ModelOps CI/CD architecture — two AI gates in the promotion flow](docs/architecture.png)
 
-<!-- Once exported, uncomment: -->
-<!-- ![ModelOps CI/CD architecture](docs/architecture.png) -->
+Editable source: [`docs/architecture.drawio`](docs/architecture.drawio) (open with
+[diagrams.net](https://app.diagrams.net)). To refresh the image, re-export as
+`docs/architecture.png` (File → Export as → PNG) — GitHub renders the PNG, not the raw
+`.drawio`.
 
 ## The two gates
 
