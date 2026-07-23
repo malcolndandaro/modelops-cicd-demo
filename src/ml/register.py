@@ -26,7 +26,20 @@ import sys
 import mlflow
 from mlflow import MlflowClient
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+def _ml_dir() -> pathlib.Path:
+    """Locate src/ml, robust to `__file__` being undefined on serverless spark_python_task."""
+    try:
+        return pathlib.Path(__file__).resolve().parent
+    except NameError:
+        cwd = pathlib.Path.cwd().resolve()
+        for d in (cwd, *cwd.parents):
+            if (d / "databricks.yml").exists():
+                return d / "src" / "ml"
+        return cwd
+
+
+sys.path.insert(0, str(_ml_dir()))
 from _config import resolve_catalog_schema  # noqa: E402
 
 # ---------------------------------------------------------------------------
