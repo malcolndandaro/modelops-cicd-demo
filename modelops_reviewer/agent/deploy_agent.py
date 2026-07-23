@@ -46,12 +46,44 @@ else:
     print("WARNING: MODELOPS_SP_CLIENT_ID/SECRET not set — agent will use ambient OBO auth "
           "(will 403 on the FM if the FM-UC-permissions feature is enabled).")
 
-deployment = agents.deploy(
-    FULL_NAME,
-    version,
-    endpoint_name=ENDPOINT,
-    tags={"project": "modelops-session2"},
-    environment_vars=_env_vars,
-)
-print("endpoint_name:", deployment.endpoint_name)
-print("query_endpoint:", deployment.query_endpoint)
+try:
+    deployment = agents.deploy(
+        FULL_NAME,
+        version,
+        endpoint_name=ENDPOINT,
+        tags={"project": "modelops-session2"},
+        environment_vars=_env_vars,
+    )
+    print("endpoint_name:", deployment.endpoint_name)
+    print("query_endpoint:", deployment.query_endpoint)
+except ValueError as e:
+    # agents.deploy refuses to re-deploy a version the endpoint already serves. In that
+    # case just push the (possibly new) env vars onto the existing served entity via
+    # update_config — this is what makes a demo re-run / env-var change idempotent.
+    if "already serves" not in str(e):
+        raise
+    print(f"version {version} already served — updating env vars via update_config…")
+    from databricks.sdk import WorkspaceClient
+    from databricks.sdk.service.serving import Route, ServedEntityInput, TrafficConfig
+
+    se_name = f"malcoln_aws_stable_catalog-agentic2_mlops_dev-modelops_review_{version}"
+    base_env = {
+        "ENABLE_LANGCHAIN_STREAMING": "true",
+        "ENABLE_MLFLOW_TRACING": "true",
+        "RETURN_REQUEST_ID_IN_RESPONSE": "true",
+    }
+    WorkspaceClient().serving_endpoints.update_config(
+        name=ENDPOINT,
+        served_entities=[
+            ServedEntityInput(
+                entity_name=FULL_NAME,
+                entity_version=str(version),
+                name=se_name,
+                workload_size="Small",
+                scale_to_zero_enabled=False,
+                environment_vars={**base_env, **_env_vars},
+            )
+        ],
+        traffic_config=TrafficConfig(routes=[Route(served_model_name=se_name, traffic_percentage=100)]),
+    )
+    print(f"update_config OK — {ENDPOINT} serves v{version} with FM-auth env vars, 100% traffic")
