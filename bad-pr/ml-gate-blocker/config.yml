@@ -1,7 +1,7 @@
 # Versioned training configuration for the demand_forecaster model.
 # Changes to this file drive the Gate 2 config-diff shown in the promotion prompt.
 # A PR that edits hyperparameters MUST also update max_acceptable_mae in this file
-# AND update the regression test in tests/test_demand_forecaster.py (ML-02 rule).
+# AND update the regression test in tests/test_demand_forecaster.py (ML-01 rule).
 
 model_name: demand_forecaster
 
