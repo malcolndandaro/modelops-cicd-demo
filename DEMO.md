@@ -6,7 +6,7 @@
 > **Catálogo:** `malcoln_aws_stable_catalog` · Schemas: `agentic2_mlops_dev` / `agentic2_mlops_staging` / `agentic2_mlops_prod`
 > **Repo:** `github.com/malcolndandaro/modelops-cicd-demo` (público)
 > **LLM:** `databricks-glm-5-2`
-> **Endpoints:** `modelops-reviewer` (Gate 1), `modelops-handbook-ka` (KA do Handbook)
+> **Endpoints:** `modelops-reviewer` (Gate 1), `ka-5f315d3c-endpoint` (KA do Handbook, display name `modelops-handbook-ka`)
 
 ---
 
@@ -20,7 +20,11 @@
   DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks serving-endpoints get modelops-reviewer
   ```
   Checar `state.ready=READY`. Fazer uma chamada de aquecimento se necessário.
-- [ ] **[PREP] Knowledge Assistant `modelops-handbook-ka` PRONTO.** Verificar no UI do workspace que o endpoint do KA está ativo.
+- [ ] **[PREP] Knowledge Assistant PRONTO.** Display name `modelops-handbook-ka`, endpoint de serving `ka-5f315d3c-endpoint`. Verificar:
+  ```bash
+  DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks serving-endpoints get ka-5f315d3c-endpoint
+  ```
+  O reviewer aponta para esse endpoint via a env var `KA_ENDPOINT` (se recriar o KA no reset, atualizar o valor).
 - [ ] **[PREP] Reset executado com sucesso.** Rodar:
   ```bash
   bash scripts/reset_demo.sh
@@ -190,7 +194,7 @@
 ```bash
 # Health check dos endpoints
 DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks serving-endpoints get modelops-reviewer
-DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks serving-endpoints get modelops-handbook-ka
+DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks serving-endpoints get ka-5f315d3c-endpoint
 
 # Estado do modelo UC
 DATABRICKS_CONFIG_PROFILE=agentic-mlops-cicd-aws databricks models get-version \
